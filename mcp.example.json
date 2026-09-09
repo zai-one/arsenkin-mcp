@@ -1,0 +1,6 @@
+{
+  "env": {
+    "ARSENKIN_TOKEN_FILE": "secrets/api.token",
+    "ARSENKIN_STATE_PATH": "state/arsenkin.sqlite"
+  }
+}

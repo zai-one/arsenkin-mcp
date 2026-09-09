@@ -1,0 +1,149 @@
+from __future__ import annotations
+
+from typing import Any
+from uuid import UUID
+
+from zai_arsenkin.adapter import build_batch_plan, estimate_cost
+from zai_arsenkin.models import validate_request_hashes
+
+
+def register_tools(server: Any, runtime: Any) -> None:
+    registry, settings, store, jobs = runtime.registry, runtime.settings, runtime.store, runtime.jobs
+    current_access, require_scopes = runtime.current_access, runtime.require_scopes
+    _provider_read = runtime.read
+    _job_view, _owned_job = runtime.job_view, runtime.owned_job
+
+    @server.tool(auth=require_scopes("arsenkin:read"))
+    async def arsenkin_status() -> dict[str, Any]:
+        """Check Arsenkin account/API status; this does not submit a paid task."""
+        return await _provider_read("arsenkin", "status", {}, registry.arsenkin().status)
+
+    @server.tool(auth=require_scopes("arsenkin:read"))
+    async def arsenkin_estimate(profile: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Validate an Arsenkin payload and estimate cost without a live call."""
+        return estimate_cost(profile, payload, settings.arsenkin_cost_per_query)
+
+    @server.tool(auth=require_scopes("arsenkin:read"))
+    async def arsenkin_batch_estimate(requests: list[dict[str, Any]]) -> dict[str, Any]:
+        """Plan, coalesce and price a multi-request batch without a live call."""
+        return build_batch_plan(requests, settings.arsenkin_cost_per_query)
+
+    @server.tool(auth=require_scopes("arsenkin:read"))
+    async def arsenkin_request_hash_lookup(request_hashes: list[str]) -> dict[str, Any]:
+        """Look up exact server-ledger hashes without exposing job or provider payload data."""
+        access = current_access()
+        unique_hashes = validate_request_hashes(request_hashes)
+        lookup = await store.lookup_job_request_hashes(
+            access.principal_id,
+            "arsenkin",
+            unique_hashes,
+        )
+        matches_by_hash: dict[str, list[Any]] = {value: [] for value in unique_hashes}
+        for match in lookup.matches:
+            matches_by_hash[match.request_hash].append(match)
+        matches = [
+            {
+                "request_hash": value,
+                "hash_kinds": sorted({match.hash_kind for match in matches_by_hash[value]}),
+                "statuses": sorted({match.status for match in matches_by_hash[value]}),
+                "submission_outcome_unknown": any(
+                    match.submission_outcome_unknown for match in matches_by_hash[value]
+                ),
+            }
+            for value in unique_hashes
+            if matches_by_hash[value]
+        ]
+        return {
+            "requested_count": len(request_hashes),
+            "unique_request_count": len(unique_hashes),
+            "matched_request_count": len(matches),
+            "coverage_complete": lookup.unindexed_batch_job_count == 0,
+            "unindexed_batch_job_count": lookup.unindexed_batch_job_count,
+            "matches": matches,
+            "missing_request_hashes": [value for value in unique_hashes if not matches_by_hash[value]],
+        }
+
+    @server.tool(auth=require_scopes("arsenkin:execute"))
+    async def arsenkin_prepare(profile: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Create a bounded approval; trusted policy may return typed server acceptance."""
+        access = current_access()
+        auto_accept = settings.arsenkin_unlimited_auto_paid_allowed({profile})
+        return await jobs.prepare_arsenkin(
+            access.principal_id,
+            profile,
+            payload,
+            access.monthly_cost_limit,
+            access.monthly_cost_unlimited,
+            auto_accept,
+            settings.arsenkin_standing_policy_id,
+            settings.arsenkin_max_cost_per_approval,
+        )
+
+    @server.tool(auth=require_scopes("arsenkin:execute"))
+    async def arsenkin_batch_prepare(requests: list[dict[str, Any]]) -> dict[str, Any]:
+        """Create one bounded batch approval; trusted policy may accept it server-side."""
+        access = current_access()
+        profiles = {str(item.get("profile", "")).strip() for item in requests if isinstance(item, dict)}
+        auto_accept = settings.arsenkin_unlimited_auto_paid_allowed(profiles)
+        return await jobs.prepare_arsenkin_batch(
+            access.principal_id,
+            requests,
+            access.monthly_cost_limit,
+            access.monthly_cost_unlimited,
+            auto_accept,
+            settings.arsenkin_standing_policy_id,
+            settings.arsenkin_max_cost_per_approval,
+        )
+
+    @server.tool(auth=require_scopes("arsenkin:execute"))
+    async def arsenkin_submit(
+        profile: str, payload: dict[str, Any], approval_id: str, idempotency_key: str
+    ) -> dict[str, Any]:
+        """Queue an approved paid Arsenkin request; never blocks on provider polling."""
+        await registry.ensure_enabled("arsenkin")
+        access = current_access()
+        job = await jobs.submit_arsenkin(
+            access.principal_id, profile, payload, UUID(approval_id), idempotency_key
+        )
+        return _job_view(job)
+
+    @server.tool(auth=require_scopes("arsenkin:execute"))
+    async def arsenkin_batch_submit(
+        requests: list[dict[str, Any]], approval_id: str, idempotency_key: str
+    ) -> dict[str, Any]:
+        """Queue one approved batch job; worker coalesces and polls centrally."""
+        await registry.ensure_enabled("arsenkin")
+        access = current_access()
+        job = await jobs.submit_arsenkin_batch(
+            access.principal_id, requests, UUID(approval_id), idempotency_key
+        )
+        return _job_view(job)
+
+    @server.tool(auth=require_scopes("arsenkin:read"))
+    async def arsenkin_task_status(job_id: str) -> dict[str, Any]:
+        """Return durable status for the principal's Arsenkin job."""
+        return await _owned_job(job_id)
+
+    @server.tool(auth=require_scopes("arsenkin:read"))
+    async def arsenkin_get_result(job_id: str) -> dict[str, Any]:
+        """Return the durable result for the principal's Arsenkin job."""
+        return await _owned_job(job_id, include_result=True)
+
+    @server.tool(auth=require_scopes("arsenkin:read"))
+    async def arsenkin_export_result(
+        job_id: str, format: str = "jsonl", max_rows: int = 500
+    ) -> dict[str, Any]:
+        """Export a saved owned job as bounded JSONL/CSV with JSON-pointer provenance; no provider calls."""
+        from zai_arsenkin.export import export_result
+
+        job = await _owned_job(job_id, include_result=True)
+        return export_result(job, format, max_rows)
+
+    @server.tool(auth=require_scopes("arsenkin:execute"))
+    async def arsenkin_cancel(job_id: str) -> dict[str, Any]:
+        """Request cancellation of the principal's queued or running Arsenkin job."""
+        access = current_access()
+        return {
+            "job_id": job_id,
+            "cancel_requested": await store.cancel_job(UUID(job_id), access.principal_id),
+        }

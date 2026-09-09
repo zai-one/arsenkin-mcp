@@ -1,0 +1,254 @@
+{
+  "gateway_revision": "3cba360d0358a21b572123f2c2222ce47759fda2",
+  "method": "authenticated original runtime discovery; no provider calls",
+  "tools": {
+    "arsenkin_status": {
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Check Arsenkin account/API status; this does not submit a paid task."
+    },
+    "arsenkin_estimate": {
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "profile",
+          "payload"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Validate an Arsenkin payload and estimate cost without a live call."
+    },
+    "arsenkin_batch_estimate": {
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "requests": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "requests"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Plan, coalesce and price a multi-request batch without a live call."
+    },
+    "arsenkin_request_hash_lookup": {
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "request_hashes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "request_hashes"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Look up exact server-ledger hashes without exposing job or provider payload data."
+    },
+    "arsenkin_prepare": {
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "profile",
+          "payload"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Create a bounded approval; trusted policy may return typed server acceptance."
+    },
+    "arsenkin_batch_prepare": {
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "requests": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "requests"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Create one bounded batch approval; trusted policy may accept it server-side."
+    },
+    "arsenkin_submit": {
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "approval_id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "profile",
+          "payload",
+          "approval_id",
+          "idempotency_key"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Queue an approved paid Arsenkin request; never blocks on provider polling."
+    },
+    "arsenkin_batch_submit": {
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "requests": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "approval_id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "requests",
+          "approval_id",
+          "idempotency_key"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Queue one approved batch job; worker coalesces and polls centrally."
+    },
+    "arsenkin_task_status": {
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Return durable status for the principal's Arsenkin job."
+    },
+    "arsenkin_get_result": {
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Return the durable result for the principal's Arsenkin job."
+    },
+    "arsenkin_cancel": {
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "type": "object"
+      },
+      "outputSchema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Request cancellation of the principal's queued or running Arsenkin job."
+    }
+  }
+}
