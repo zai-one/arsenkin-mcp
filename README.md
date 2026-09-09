@@ -18,7 +18,10 @@ Try asking your assistant:
 |---|---|
 | Research keywords | Keyword frequency, related phrases, demand trends, search suggestions and clustering. |
 | Inspect search visibility | SERP, position, indexation and relevant-URL checks. |
-| Manage a batch | Estimate, approve, submit, track and export saved results as CSV or JSONL. |
+| Manage a batch | Discover profiles, estimate, approve, submit, diagnose the worker and export saved results. |
+| Read the result | URL/host occurrence tables and cluster records with source pointers, in JSON or CSV. |
+
+[Saved-result examples and worker help](docs/RESULT_TABLES.md) show how to turn a completed SEO task into a useful table.
 
 ## Quick start
 

@@ -17,6 +17,7 @@ class Worker:
         self.runtime, self.store = runtime, runtime.store
 
     async def run_once(self) -> bool:
+        self.store.heartbeat()
         if not self.runtime.config.enabled("arsenkin"):
             return False
         claim = self.store.claim_job()

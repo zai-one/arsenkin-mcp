@@ -59,6 +59,8 @@ class StateStore:
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with self.connect() as db:
             db.executescript("""
+                CREATE TABLE IF NOT EXISTS worker_health(
+                    account TEXT PRIMARY KEY, last_cycle REAL NOT NULL);
                 CREATE TABLE IF NOT EXISTS approvals(
                     account TEXT NOT NULL, id TEXT NOT NULL, actor TEXT NOT NULL,
                     operation TEXT NOT NULL, digest TEXT NOT NULL, cost INTEGER NOT NULL,
@@ -87,6 +89,87 @@ class StateStore:
                     account TEXT NOT NULL, job_id TEXT NOT NULL, digest TEXT NOT NULL, kind TEXT NOT NULL,
                     PRIMARY KEY(account,job_id,digest,kind));
             """)
+
+    def heartbeat(self) -> None:
+        # Diagnostic failure must not interrupt existing paid-job execution.
+        try:
+            with self.connect() as db:
+                db.execute(
+                    "INSERT INTO worker_health VALUES(?,?) ON CONFLICT(account) "
+                    "DO UPDATE SET last_cycle=excluded.last_cycle",
+                    (self.account, time.time()),
+                )
+        except sqlite3.Error:
+            pass
+
+    def diagnostics(self, actor: str) -> dict[str, Any]:
+        month = datetime.now(UTC).strftime("%Y-%m")
+        with self.connect() as db:
+            worker = db.execute(
+                "SELECT last_cycle FROM worker_health WHERE account=?", (self.account,)
+            ).fetchone()
+            counts = {
+                row["status"]: row["n"]
+                for row in db.execute(
+                    "SELECT status, COUNT(*) AS n FROM jobs WHERE account=? AND actor=? GROUP BY status",
+                    (self.account, actor),
+                )
+            }
+            reserved = (
+                db.execute(
+                    "SELECT COALESCE(SUM(amount),0) FROM cost_reservations "
+                    "WHERE account=? AND actor=? AND month=? AND released=0",
+                    (self.account, actor, month),
+                ).fetchone()[0]
+                / 1_000_000
+            )
+        age = time.time() - worker["last_cycle"] if worker else None
+        health = (
+            "not_seen" if age is None else "clock_skew" if age < 0 else "recent" if age <= 120 else "stale"
+        )
+        config = self.config
+        suggestions = []
+        if not config.token:
+            suggestions.append("configure_provider_credential")
+        if health != "recent":
+            suggestions.append("start_worker_with_the_same_config")
+        if (
+            not all(
+                (
+                    config.principal_monthly_cost_limit,
+                    config.account_monthly_cost_limit,
+                    config.arsenkin_max_cost_per_approval,
+                )
+            )
+            and config.arsenkin_auto_paid_policy != "unlimited"
+        ):
+            suggestions.append("configure_paid_limits_before_prepare")
+        return {
+            "scope": "local_state_only",
+            "provider_calls": 0,
+            "provider_connectivity": "not_checked",
+            "worker": {
+                "state": health,
+                "last_cycle_age_seconds": None if age is None else round(age, 2),
+                "meaning": "recent cycle is not proof that a provider task succeeded",
+            },
+            "own_jobs_by_status": counts,
+            "budget": {
+                "month_utc": month,
+                "own_reserved_or_spent_units": reserved,
+                "principal_monthly_limit": config.principal_monthly_cost_limit,
+                "account_monthly_limit": config.account_monthly_cost_limit,
+                "per_approval_limit": config.arsenkin_max_cost_per_approval,
+                "paid_policy": config.arsenkin_auto_paid_policy,
+                "provider_balance": "not_checked",
+            },
+            "limits": {
+                "request_attempts_per_minute": config.request_rate_limit,
+                "provider_inflight": config.arsenkin_max_inflight,
+                "queue_target": config.arsenkin_server_queue_target,
+            },
+            "next_steps": suggestions,
+        }
 
     def connect(self) -> sqlite3.Connection:
         db = sqlite3.connect(self.path, timeout=5)

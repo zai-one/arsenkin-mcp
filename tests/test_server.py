@@ -169,7 +169,7 @@ async def test_real_stdio_process_discovers_and_estimates_without_credentials(tm
         "ARSENKIN_ACCOUNT_MONTHLY_COST_LIMIT": "0",
     }
     async with Client(StdioTransport(sys.executable, ["-m", "zai_arsenkin"], env=env)) as client:
-        assert len(await client.list_tools()) == 12
+        assert len(await client.list_tools()) == 15
         prepared = (
             await client.call_tool("arsenkin_prepare", {"profile": "check-top", "payload": PAYLOAD})
         ).data

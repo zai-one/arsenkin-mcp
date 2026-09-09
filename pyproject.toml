@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "zai-arsenkin-mcp"
-version = "0.2.0"
-description = "Standalone governed Arsenkin MCP service"
+version = "0.3.0"
+description = "Arsenkin SEO batches, saved-result tables and local job diagnostics for AI assistants"
 readme = "README.md"
 license = "LicenseRef-ZAI-ONE"
 license-files = ["LICENSE", "NOTICE"]

@@ -14,6 +14,32 @@ def register_tools(server: Any, runtime: Any) -> None:
     _job_view, _owned_job = runtime.job_view, runtime.owned_job
 
     @server.tool(auth=require_scopes("arsenkin:read"))
+    async def arsenkin_profile_catalog() -> dict[str, Any]:
+        """List supported profiles, payload fields and example SEO requests; no provider calls."""
+        from zai_arsenkin.catalog import profile_catalog
+
+        return profile_catalog()
+
+    @server.tool(auth=require_scopes("arsenkin:read"))
+    async def arsenkin_local_diagnostics() -> dict[str, Any]:
+        """Explain local worker heartbeat, your queue and configured budget; no provider calls."""
+        return store.diagnostics(current_access().principal_id)
+
+    @server.tool(auth=require_scopes("arsenkin:read"))
+    async def arsenkin_result_table(
+        job_id: str, view: str, result_pointer: str = "", format: str = "json", max_rows: int = 500
+    ) -> dict[str, Any]:
+        """Create SERP URL/host frequency or cluster tables from a selected saved-result JSON pointer.
+
+        serp_urls/serp_hosts select repeatUrl/repeatHost; clusters selects cluster records.
+        Completeness covers only this selected view, never the whole provider task. No new paid calls.
+        """
+        from zai_arsenkin.result_tables import result_table
+
+        job = await _owned_job(job_id, include_result=True)
+        return result_table(job, view, result_pointer, format, max_rows)
+
+    @server.tool(auth=require_scopes("arsenkin:read"))
     async def arsenkin_status() -> dict[str, Any]:
         """Check Arsenkin account/API status; this does not submit a paid task."""
         return await _provider_read("arsenkin", "status", {}, registry.arsenkin().status)

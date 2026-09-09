@@ -102,7 +102,12 @@ async def test_all_original_schemas_descriptions_and_no_public_acceptance(config
             for tool in await client.list_tools()
         }
         assert {name: actual[name] for name in expected} == expected
-        assert set(actual) - set(expected) == {"arsenkin_export_result"}
+        assert set(actual) - set(expected) == {
+            "arsenkin_export_result",
+            "arsenkin_profile_catalog",
+            "arsenkin_local_diagnostics",
+            "arsenkin_result_table",
+        }
         prepared = (
             await client.call_tool("arsenkin_prepare", {"profile": "check-top", "payload": PAYLOAD})
         ).data
