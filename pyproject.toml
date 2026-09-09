@@ -16,6 +16,7 @@ dependencies = ["httpx==0.28.1"]
 standalone = ["fastmcp==3.4.4"]
 
 [project.scripts]
+arsenkin-mcp-setup = "zai_arsenkin.setup:main"
 arsenkin-mcp = "zai_arsenkin.server:main"
 arsenkin-worker = "zai_arsenkin.worker:main"
 arsenkin-approval = "zai_arsenkin.approvals:main"
