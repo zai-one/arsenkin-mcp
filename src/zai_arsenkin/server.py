@@ -15,6 +15,7 @@ from zai_arsenkin.config import ServiceConfig
 from zai_arsenkin.onboarding import check_config, load_config
 from zai_arsenkin.runtime import Runtime
 from zai_arsenkin.tools import register_tools
+from zai_arsenkin.update_check import CACHE_FILE, cached_hint, refresh_in_background
 
 
 class ToolRegistrar:
@@ -52,7 +53,13 @@ def create_server(
         if transport == "http"
         else None
     )
-    server = FastMCP("Arsenkin MCP", version=__version__, auth=auth, mask_error_details=True)
+    server = FastMCP(
+        "Arsenkin MCP",
+        version=__version__,
+        auth=auth,
+        mask_error_details=True,
+        instructions=cached_hint(config.state_path.parent / CACHE_FILE),
+    )
     runtime = Runtime(config, transport, http_factory)
     registrar = ToolRegistrar(server, runtime)
     register_tools(registrar, runtime)
@@ -77,6 +84,8 @@ def main() -> None:
             print(json.dumps(result, sort_keys=True))
             parser.exit(0 if result["ready"] else 2)
         server = create_server(config, transport=args.transport)
+        # Non-blocking: refresh a stale update cache for the next start; failures are silent.
+        refresh_in_background(config.state_path.parent / CACHE_FILE)
     except (ValueError, OSError) as exc:
         parser.exit(2, f"configuration error: {type(exc).__name__}; check credential and policy files\n")
     if args.transport == "http":

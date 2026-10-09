@@ -21,6 +21,7 @@ from zai_arsenkin.errors import SafeToolError, safe_provider_error
 from zai_arsenkin.execution import _DEFINITE_SUBMIT_REJECTION_STATUSES, _batch_summary
 from zai_arsenkin.jobs import JobService
 from zai_arsenkin.models import JobRecord, has_provider_reference
+from zai_arsenkin.projects import ArsenkinProjectsAdapter
 from zai_arsenkin.sanitizer import DURABLE_SANITIZER_LIMITS, sanitize_provider_response
 from zai_arsenkin.state import StateStore
 from zai_arsenkin.transport import (
@@ -87,6 +88,14 @@ class Registry:
                 coalescer=RequestOwnedFlight(),
             )
         return state.adapters["arsenkin"]
+
+    def arsenkin_projects(self) -> ArsenkinProjectsAdapter:
+        state = self.runtime.state.get()
+        if "arsenkin_projects" not in state.adapters:
+            state.adapters["arsenkin_projects"] = ArsenkinProjectsAdapter(
+                self.settings.token, http=state.http, coalescer=RequestOwnedFlight()
+            )
+        return state.adapters["arsenkin_projects"]
 
     async def paid_submit(self, job, operation, factory, *, before=None, group_id=None):
         claim_id, owner = self.runtime.job_claim.get()
