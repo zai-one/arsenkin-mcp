@@ -20,6 +20,8 @@ Try asking your assistant:
 | Inspect search visibility | SERP, position, indexation and relevant-URL checks. |
 | Manage a batch | Discover profiles, estimate, approve, submit, diagnose the worker and export saved results. |
 | Read the result | URL/host occurrence tables and cluster records with source pointers, in JSON or CSV. |
+| Review saved projects | `arsenkin_projects` reads your SEO projects through the [Projects API](https://help.arsenkin.ru/projects-api): regions, competitors, keywords, groups, saved positions and visibility/top/average/median charts. It never starts a position check. |
+| Check remaining limits | `arsenkin_limits` returns the account's total and spent limits before you prepare paid tasks. |
 
 [Saved-result examples and worker help](docs/RESULT_TABLES.md) show how to turn a completed SEO task into a useful table.
 
@@ -79,6 +81,10 @@ If tools do not appear, check the absolute path, whether the client can find `uv
 ## Access and limits
 
 For execution, configure paid-task limits and approval, then run the worker with the same config and SQLite state. Exported values keep their JSON paths; specialised SEO tables are not generated automatically. Cancelling a job does not guarantee a refund for work already submitted.
+
+### Updates
+
+`arsenkin_check_update` compares the installed version with the latest [GitHub release](https://github.com/zai-one/arsenkin-mcp/releases) and returns the release link and the matching `uv tool install --force ...` command. It never installs anything and spends no Arsenkin limits. The result is cached for 24 hours next to the state database; when a newer release is cached, the server instructions and `arsenkin_local_diagnostics` mention it. Set `ARSENKIN_DISABLE_UPDATE_CHECK=1` to turn off both the tool's network request and the startup refresh.
 
 Authenticated HTTP is available for a server deployment. See [HTTP setup](INSTALL.md#http), [configuration and permissions](docs/RUNTIME.md) and [Python package integration](INSTALL.md#python-package-and-platform-integration).
 

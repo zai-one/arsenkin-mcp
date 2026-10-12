@@ -454,6 +454,10 @@ class ArsenkinAdapter:
     async def status(self) -> dict[str, Any]:
         return await self._post("info", {"query": "status"}, coalesce=True)
 
+    async def limits(self) -> dict[str, Any]:
+        # Documented read-only account query: https://help.arsenkin.ru/api ("query": "limits").
+        return await self._post("info", {"query": "limits"}, coalesce=True)
+
     async def submit(self, profile_name: str, payload: dict[str, Any]) -> dict[str, Any]:
         # The worker owns the paid-submit reconciliation boundary.  Return the
         # raw successful response even when its task reference is missing so

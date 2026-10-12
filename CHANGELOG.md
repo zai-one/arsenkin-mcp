@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `arsenkin_projects`: read-only Projects API v1 (projects, regions, competitors, keywords, groups, saved positions, visibility/top/average/median charts). `POST /positions/run` and all write endpoints stay unavailable.
+- `arsenkin_limits`: account limits via the documented `info` `{"query": "limits"}` request.
+- `arsenkin_check_update`: suggests an update from the latest GitHub release (24h cache, offline-safe, never installs); cached hint in server instructions and `arsenkin_local_diagnostics`; opt out with `ARSENKIN_DISABLE_UPDATE_CHECK=1`.
+- MCP tool annotations on every tool; paid submit and cancel are marked destructive.
+
 ## 0.3.0
 
 - Profile catalog with payload examples and local worker/queue/budget diagnostics.

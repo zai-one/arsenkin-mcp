@@ -1,10 +1,27 @@
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+from typing import Any, Literal
 from uuid import UUID
 
 from zai_arsenkin.adapter import build_batch_plan, estimate_cost
 from zai_arsenkin.models import validate_request_hashes
+from zai_arsenkin.projects import projects_request
+from zai_arsenkin.update_check import CACHE_FILE, cached_hint, check_update
+
+# MCP tool annotations; enforcement (scopes, approvals, budgets) stays server-side.
+LOCAL_READ = {"readOnlyHint": True, "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
+PROVIDER_READ = {**LOCAL_READ, "openWorldHint": True}
+# Creates a local approval record only; no provider call and no spend.
+LOCAL_PREPARE = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": False,
+    "openWorldHint": False,
+}
+# Queues an approved paid provider task; idempotency_key replays return the same job.
+PAID_SUBMIT = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": True}
+CANCEL = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": True}
 
 
 def register_tools(server: Any, runtime: Any) -> None:
@@ -12,20 +29,34 @@ def register_tools(server: Any, runtime: Any) -> None:
     current_access, require_scopes = runtime.current_access, runtime.require_scopes
     _provider_read = runtime.read
     _job_view, _owned_job = runtime.job_view, runtime.owned_job
+    update_cache = settings.state_path.parent / CACHE_FILE
 
-    @server.tool(auth=require_scopes("arsenkin:read"))
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)
     async def arsenkin_profile_catalog() -> dict[str, Any]:
         """List supported profiles, payload fields and example SEO requests; no provider calls."""
         from zai_arsenkin.catalog import profile_catalog
 
         return profile_catalog()
 
-    @server.tool(auth=require_scopes("arsenkin:read"))
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)
     async def arsenkin_local_diagnostics() -> dict[str, Any]:
         """Explain local worker heartbeat, your queue and configured budget; no provider calls."""
-        return store.diagnostics(current_access().principal_id)
+        result = store.diagnostics(current_access().principal_id)
+        hint = cached_hint(update_cache)  # local cache only; no network
+        if hint:
+            result["update_available"] = hint
+        return result
 
-    @server.tool(auth=require_scopes("arsenkin:read"))
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations={**LOCAL_READ, "openWorldHint": True})
+    async def arsenkin_check_update(force_refresh: bool = False) -> dict[str, Any]:
+        """Compare the installed version with the latest GitHub release and suggest an update command.
+
+        Read-only; never installs anything and spends no Arsenkin limits. Uses a 24h cache.
+        Set ARSENKIN_DISABLE_UPDATE_CHECK=1 to opt out.
+        """
+        return await asyncio.to_thread(check_update, update_cache, force=force_refresh)
+
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)
     async def arsenkin_result_table(
         job_id: str, view: str, result_pointer: str = "", format: str = "json", max_rows: int = 500
     ) -> dict[str, Any]:
@@ -39,22 +70,91 @@ def register_tools(server: Any, runtime: Any) -> None:
         job = await _owned_job(job_id, include_result=True)
         return result_table(job, view, result_pointer, format, max_rows)
 
-    @server.tool(auth=require_scopes("arsenkin:read"))
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations=PROVIDER_READ)
     async def arsenkin_status() -> dict[str, Any]:
         """Check Arsenkin account/API status; this does not submit a paid task."""
         return await _provider_read("arsenkin", "status", {}, registry.arsenkin().status)
 
-    @server.tool(auth=require_scopes("arsenkin:read"))
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations=PROVIDER_READ)
+    async def arsenkin_limits() -> dict[str, Any]:
+        """Read the account's total and spent Arsenkin limits; never submits a paid task."""
+        return await _provider_read("arsenkin", "limits", {}, registry.arsenkin().limits)
+
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations=PROVIDER_READ)
+    async def arsenkin_projects(
+        report: Literal[
+            "projects",
+            "project",
+            "regions",
+            "competitors",
+            "keywords",
+            "groups",
+            "positions",
+            "chart_visibility",
+            "chart_top_statistics",
+            "chart_average_position",
+            "chart_median_position",
+        ],
+        project_id: int | None = None,
+        project_region_id: int | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        group_id: int | None = None,
+        parent_id: int | None = None,
+        keyword_ids: list[int] | None = None,
+        position_from: int | None = None,
+        position_to: int | None = None,
+        sort: Literal["scan_date", "-scan_date"] | None = None,
+        search: str | None = None,
+        name: str | None = None,
+        domain: str | None = None,
+        status_name: str | None = None,
+        per_page: int | None = None,
+        page: int | None = None,
+    ) -> dict[str, Any]:
+        """Read saved Arsenkin SEO projects data (Projects API v1); never starts paid position checks.
+
+        report=projects lists projects. With project_id: project, regions, competitors, keywords,
+        groups, positions (saved positions; filter by project_region_id, dates, groups, keyword_ids,
+        position_from/to) and charts (chart_visibility, chart_top_statistics, chart_average_position,
+        chart_median_position) that require project_region_id from report=project or regions.
+        """
+        optional = {
+            "project_region_id": project_region_id,
+            "start_date": start_date,
+            "end_date": end_date,
+            "group_id": group_id,
+            "parent_id": parent_id,
+            "keyword_ids": keyword_ids,
+            "position_from": position_from,
+            "position_to": position_to,
+            "sort": sort,
+            "search": search,
+            "name": name,
+            "domain": domain,
+            "status_name": status_name,
+            "per_page": per_page,
+            "page": page,
+        }
+        return await _provider_read(
+            "arsenkin",
+            f"projects_{report}",
+            {"report": report, "project_id": project_id, **optional},
+            lambda: registry.arsenkin_projects().get(report, project_id, **optional),
+            validate=lambda: projects_request(report, project_id, **optional),
+        )
+
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)
     async def arsenkin_estimate(profile: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Validate an Arsenkin payload and estimate cost without a live call."""
         return estimate_cost(profile, payload, settings.arsenkin_cost_per_query)
 
-    @server.tool(auth=require_scopes("arsenkin:read"))
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)
     async def arsenkin_batch_estimate(requests: list[dict[str, Any]]) -> dict[str, Any]:
         """Plan, coalesce and price a multi-request batch without a live call."""
         return build_batch_plan(requests, settings.arsenkin_cost_per_query)
 
-    @server.tool(auth=require_scopes("arsenkin:read"))
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)
     async def arsenkin_request_hash_lookup(request_hashes: list[str]) -> dict[str, Any]:
         """Look up exact server-ledger hashes without exposing job or provider payload data."""
         access = current_access()
@@ -89,7 +189,7 @@ def register_tools(server: Any, runtime: Any) -> None:
             "missing_request_hashes": [value for value in unique_hashes if not matches_by_hash[value]],
         }
 
-    @server.tool(auth=require_scopes("arsenkin:execute"))
+    @server.tool(auth=require_scopes("arsenkin:execute"), annotations=LOCAL_PREPARE)
     async def arsenkin_prepare(profile: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Create a bounded approval; trusted policy may return typed server acceptance."""
         access = current_access()
@@ -105,7 +205,7 @@ def register_tools(server: Any, runtime: Any) -> None:
             settings.arsenkin_max_cost_per_approval,
         )
 
-    @server.tool(auth=require_scopes("arsenkin:execute"))
+    @server.tool(auth=require_scopes("arsenkin:execute"), annotations=LOCAL_PREPARE)
     async def arsenkin_batch_prepare(requests: list[dict[str, Any]]) -> dict[str, Any]:
         """Create one bounded batch approval; trusted policy may accept it server-side."""
         access = current_access()
@@ -121,7 +221,7 @@ def register_tools(server: Any, runtime: Any) -> None:
             settings.arsenkin_max_cost_per_approval,
         )
 
-    @server.tool(auth=require_scopes("arsenkin:execute"))
+    @server.tool(auth=require_scopes("arsenkin:execute"), annotations=PAID_SUBMIT)
     async def arsenkin_submit(
         profile: str, payload: dict[str, Any], approval_id: str, idempotency_key: str
     ) -> dict[str, Any]:
@@ -133,7 +233,7 @@ def register_tools(server: Any, runtime: Any) -> None:
         )
         return _job_view(job)
 
-    @server.tool(auth=require_scopes("arsenkin:execute"))
+    @server.tool(auth=require_scopes("arsenkin:execute"), annotations=PAID_SUBMIT)
     async def arsenkin_batch_submit(
         requests: list[dict[str, Any]], approval_id: str, idempotency_key: str
     ) -> dict[str, Any]:
@@ -145,17 +245,17 @@ def register_tools(server: Any, runtime: Any) -> None:
         )
         return _job_view(job)
 
-    @server.tool(auth=require_scopes("arsenkin:read"))
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)
     async def arsenkin_task_status(job_id: str) -> dict[str, Any]:
         """Return durable status for the principal's Arsenkin job."""
         return await _owned_job(job_id)
 
-    @server.tool(auth=require_scopes("arsenkin:read"))
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)
     async def arsenkin_get_result(job_id: str) -> dict[str, Any]:
         """Return the durable result for the principal's Arsenkin job."""
         return await _owned_job(job_id, include_result=True)
 
-    @server.tool(auth=require_scopes("arsenkin:read"))
+    @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)
     async def arsenkin_export_result(
         job_id: str, format: str = "jsonl", max_rows: int = 500
     ) -> dict[str, Any]:
@@ -165,7 +265,7 @@ def register_tools(server: Any, runtime: Any) -> None:
         job = await _owned_job(job_id, include_result=True)
         return export_result(job, format, max_rows)
 
-    @server.tool(auth=require_scopes("arsenkin:execute"))
+    @server.tool(auth=require_scopes("arsenkin:execute"), annotations=CANCEL)
     async def arsenkin_cancel(job_id: str) -> dict[str, Any]:
         """Request cancellation of the principal's queued or running Arsenkin job."""
         access = current_access()

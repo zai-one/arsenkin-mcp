@@ -107,6 +107,9 @@ async def test_all_original_schemas_descriptions_and_no_public_acceptance(config
             "arsenkin_profile_catalog",
             "arsenkin_local_diagnostics",
             "arsenkin_result_table",
+            "arsenkin_limits",
+            "arsenkin_projects",
+            "arsenkin_check_update",
         }
         prepared = (
             await client.call_tool("arsenkin_prepare", {"profile": "check-top", "payload": PAYLOAD})
