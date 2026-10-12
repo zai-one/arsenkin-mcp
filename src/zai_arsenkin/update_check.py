@@ -57,7 +57,7 @@ def parse_version(value: object) -> tuple[int, ...] | None:
 def update_command(version: str) -> str:
     wheel = f"{WHEEL_PREFIX}-{version}-py3-none-any.whl"
     url = f"https://github.com/{REPOSITORY}/releases/download/v{version}/{wheel}"
-    return f'uv tool install --force "{DISTRIBUTION} @ {url}"'
+    return f'uv tool install --force "{DISTRIBUTION}[standalone] @ {url}"'
 
 
 def fetch_latest_release() -> dict[str, Any]:

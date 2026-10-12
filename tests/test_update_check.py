@@ -35,7 +35,7 @@ def test_newer_release_suggests_matching_install_command(tmp_path):
     assert result["latest_version"] == "99.0.0"
     assert result["release_url"] == RELEASE["html_url"]
     assert result["update_command"] == (
-        'uv tool install --force "zai-arsenkin-mcp @ https://github.com/zai-one/arsenkin-mcp/releases/'
+        'uv tool install --force "zai-arsenkin-mcp[standalone] @ https://github.com/zai-one/arsenkin-mcp/releases/'
         'download/v99.0.0/zai_arsenkin_mcp-99.0.0-py3-none-any.whl"'
     )
     assert result["auto_update"] is False
