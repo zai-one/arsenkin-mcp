@@ -44,7 +44,7 @@ def register_tools(server: Any, runtime: Any) -> None:
         result = store.diagnostics(current_access().principal_id)
         hint = cached_hint(update_cache)  # local cache only; no network
         if hint:
-            result["update_available"] = hint
+            result["update_hint"] = hint
         return result
 
     @server.tool(auth=require_scopes("arsenkin:read"), annotations={**LOCAL_READ, "openWorldHint": True})

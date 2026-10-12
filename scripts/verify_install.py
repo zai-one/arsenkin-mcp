@@ -22,6 +22,12 @@ def local_only(sock, address):
         raise RuntimeError('external network disabled in clean-install gate')
     return original(sock, address)
 socket.socket.connect = local_only
+resolve = socket.getaddrinfo
+def local_lookup(host, *args, **kwargs):
+    if host not in {'127.0.0.1', '::1', 'localhost', None}:
+        raise RuntimeError('external DNS disabled in clean-install gate')
+    return resolve(host, *args, **kwargs)
+socket.getaddrinfo = local_lookup
 package, config = sys.argv[1:]
 sys.argv = [package, '--config', config]
 runpy.run_module(package, run_name='__main__')
@@ -51,9 +57,12 @@ entry = snippet['mcpServers'][setup.SERVICE]
 assert entry['command'] == sys.executable
 assert entry['args'] == ['-m', package, '--config', str(configured)]
 config = str(configured)
+# The wizard config omits the opt-out; pass it so the installed server never contacts GitHub.
+quiet = {k: v for k, v in original_env.items() if k.endswith('_DISABLE_UPDATE_CHECK')}
 async def check():
     transport = StdioTransport(command=sys.executable, args=['-c', child, package, config],
-                               cwd=str(pathlib.Path(config).parent), keep_alive=False)
+                               cwd=str(pathlib.Path(config).parent), env=quiet or None,
+                               keep_alive=False)
     async with Client(transport, timeout=30) as client:
         tools = await client.list_tools()
         assert len(tools) >= int(minimum)
@@ -63,6 +72,8 @@ async def check():
         diagnostic = (await client.call_tool('arsenkin_local_diagnostics', {})).data
         assert diagnostic['provider_connectivity'] == 'not_checked'
         assert diagnostic['worker']['state'] == 'not_seen'
+        update = (await client.call_tool('arsenkin_check_update', {'force_refresh': True})).data
+        assert update['status'] == 'disabled' and update['enabled'] is False
 
         print(json.dumps({'version': expected_version, 'tools': sorted(tool.name for tool in tools)}))
 asyncio.run(check())
