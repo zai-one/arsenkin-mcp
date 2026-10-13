@@ -4,6 +4,8 @@
 
 **Run your SEO checks in batches from your AI assistant.**
 
+> MCP server for Arsenkin Tools: paid SEO batch jobs (SERP, clustering, Wordstat frequency, indexation, LSI, meta tags, AI answers) with estimate → approve → submit, plus free saved Projects data.
+
 Collect SERPs, check keyword frequency, cluster queries or inspect indexation through Arsenkin Tools. The MCP server gives your assistant a workflow for estimating requests, getting approval, tracking jobs and working with saved results.
 
 [Quick start](#quick-start) · [Connect your assistant](#connect-your-assistant) · [Issues](https://github.com/zai-one/arsenkin-mcp/issues)
@@ -24,6 +26,20 @@ Try asking your assistant:
 | Check remaining limits | `arsenkin_limits` returns the account's total and spent limits before you prepare paid tasks. |
 
 [Saved-result examples and worker help](docs/RESULT_TABLES.md) show how to turn a completed SEO task into a useful table.
+
+## Why this MCP
+
+- Every paid job is estimated first and submitted only after approval; `arsenkin_limits` shows remaining limits.
+- Jobs run through a worker with tracked state; results are saved and exported as tables (JSON/CSV) with source pointers.
+- 18 tools in toolsets (meta, jobs, results, projects), 3 prompts, guide resources and skills.
+- We found no other Arsenkin Tools MCP server on GitHub (search on 2026-10-13).
+
+## Maintained and up to date
+
+- Actively maintained by ZAI.ONE: current version 0.4.0; release notes in [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zai-one/arsenkin-mcp/releases).
+- Built-in update check: ask the assistant to run `arsenkin_check_update` (public GitHub API, no credentials, cached; nothing is installed automatically; `ARSENKIN_DISABLE_UPDATE_CHECK=1` turns it off).
+- Follows current MCP practice: tool annotations (read-only / destructive hints), toolsets and read-only mode, server `instructions`, prompts and resources, structured errors with recovery hints, secrets kept out of tool output, a token budget for tool descriptions enforced in tests.
+- CI runs the test suite on Linux and Windows for every pull request.
 
 ## Quick start
 
@@ -182,9 +198,9 @@ Tests use synthetic fixtures. A passing test run does not establish live provide
 
 [ZAI.ONE](https://zai.one) is a digital agency working on websites, SEO, advertising and analytics. We also build tools that connect AI assistants to everyday work. [Talk to us on Telegram](https://t.me/zai_one) about setup, automation or an integration for your team.
 
-## Use and feedback
+## License, use and contributing
 
-You may install and use this project for your own accounts under [LicenseRef-ZAI-ONE](LICENSE).
-This is not an open-source license. Third-party notices remain in [NOTICE](NOTICE).
-If it helps, give the repository a ⭐. Missing something or found a bug? [Open an issue](https://github.com/zai-one/arsenkin-mcp/issues/new/choose).
-I'm working on this project; accepted improvements are implemented here. Support is not guaranteed.
+- **Use:** you may install and use this MCP server freely for yourself and your organisation, including commercial work. If it helps, please consider giving the repository a ⭐ — appreciated, never required.
+- **Contribute:** [issues](https://github.com/zai-one/arsenkin-mcp/issues/new/choose) and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Never post tokens, cookies, sessions or account data.
+- **Not allowed without written permission from ZAI.ONE:** copying code into other projects, forking for redistribution, embedding the server in other products or offering it as a competing service.
+- License: [LicenseRef-ZAI-ONE 2.0](LICENSE) (source-available, not open source). Third-party notices and license history: [NOTICE](NOTICE).

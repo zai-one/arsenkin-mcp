@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- License: LicenseRef-ZAI-ONE 2.0 (source-available). Free install and use for yourself and your organisation, including commercial work; issues and pull requests welcome; copying code into other projects, redistribution, embedding and competing hosted services need written permission. Earlier releases keep their LicenseRef-ZAI-ONE 1.0 terms (see NOTICE). README first screen: one-line scope, why this MCP, maintenance and update check.
+
 - Agent layer: router `instructions` (≤1200 chars) describing the estimate → prepare → explicit OK → submit → poll → result job pattern; compact template descriptions with `Cost:` lines and titles.
 - Toolsets `meta`, `jobs`, `results`, `projects` (`ARSENKIN_TOOLSETS`, `ARSENKIN_TOOLS`, `ARSENKIN_DISABLED_TOOLS`, `ARSENKIN_READ_ONLY`); `arsenkin://toolsets`.
 - Resources `arsenkin://playbook`, `arsenkin://guide/{tools,clustering-params,errors}` ("which profile when" table covering all 19 documented API tools); prompts `cluster_keywords`, `index_check`, `text_relevance`.
