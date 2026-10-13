@@ -12,7 +12,7 @@
         "additionalProperties": true,
         "type": "object"
       },
-      "description": "Check Arsenkin account/API status; this does not submit a paid task."
+      "description": "Check Arsenkin account/API availability. Use when jobs fail; for limits use `arsenkin_limits`. Cost: free."
     },
     "arsenkin_estimate": {
       "inputSchema": {
@@ -36,7 +36,7 @@
         "additionalProperties": true,
         "type": "object"
       },
-      "description": "Validate an Arsenkin payload and estimate cost without a live call."
+      "description": "Validate one job payload and estimate its cost. Use before `arsenkin_prepare`; for many payloads use `arsenkin_batch_estimate`. Cost: free, no provider call."
     },
     "arsenkin_batch_estimate": {
       "inputSchema": {
@@ -59,7 +59,7 @@
         "additionalProperties": true,
         "type": "object"
       },
-      "description": "Plan, coalesce and price a multi-request batch without a live call."
+      "description": "Plan, coalesce and price a multi-request batch. Use before `arsenkin_batch_prepare`. Cost: free, no provider call."
     },
     "arsenkin_request_hash_lookup": {
       "inputSchema": {
@@ -81,7 +81,7 @@
         "additionalProperties": true,
         "type": "object"
       },
-      "description": "Look up exact server-ledger hashes without exposing job or provider payload data."
+      "description": "Look up whether an identical request is already in the ledger. Use before resubmitting after an unknown outcome. Cost: free."
     },
     "arsenkin_prepare": {
       "inputSchema": {
@@ -105,7 +105,7 @@
         "additionalProperties": true,
         "type": "object"
       },
-      "description": "Create a bounded approval; trusted policy may return typed server acceptance."
+      "description": "Create a bounded approval for one paid job. Use after the user saw the estimate; then `arsenkin_submit`. Writes: approval record only, no spend."
     },
     "arsenkin_batch_prepare": {
       "inputSchema": {
@@ -128,7 +128,7 @@
         "additionalProperties": true,
         "type": "object"
       },
-      "description": "Create one bounded batch approval; trusted policy may accept it server-side."
+      "description": "Create one bounded approval for a batch. Use after `arsenkin_batch_estimate`; then `arsenkin_batch_submit`. Writes: approval record only, no spend."
     },
     "arsenkin_submit": {
       "inputSchema": {
@@ -160,7 +160,7 @@
         "additionalProperties": true,
         "type": "object"
       },
-      "description": "Queue an approved paid Arsenkin request; never blocks on provider polling."
+      "description": "Queue an approved paid job; returns job_id without waiting. Use only after the user's explicit OK; poll `arsenkin_task_status`. Cost: spends Arsenkin limits (see estimate); requires approval_id from `arsenkin_prepare`."
     },
     "arsenkin_batch_submit": {
       "inputSchema": {
@@ -191,7 +191,7 @@
         "additionalProperties": true,
         "type": "object"
       },
-      "description": "Queue one approved batch job; worker coalesces and polls centrally."
+      "description": "Queue an approved batch job; the worker coalesces and polls. Use after explicit OK; poll `arsenkin_task_status`. Cost: spends Arsenkin limits (see estimate); requires approval_id from `arsenkin_prepare`."
     },
     "arsenkin_task_status": {
       "inputSchema": {
@@ -210,7 +210,7 @@
         "additionalProperties": true,
         "type": "object"
       },
-      "description": "Return durable status for the principal's Arsenkin job."
+      "description": "Read durable status of your job. Use to poll after submit; when done use `arsenkin_get_result` or `arsenkin_result_table`. Cost: free."
     },
     "arsenkin_get_result": {
       "inputSchema": {
@@ -229,7 +229,7 @@
         "additionalProperties": true,
         "type": "object"
       },
-      "description": "Return the durable result for the principal's Arsenkin job."
+      "description": "Return the stored result of your job (can be large). Use for small jobs; for compact tables use `arsenkin_result_table`, for files `arsenkin_export_result`. Cost: free."
     },
     "arsenkin_cancel": {
       "inputSchema": {
@@ -248,7 +248,7 @@
         "additionalProperties": true,
         "type": "object"
       },
-      "description": "Request cancellation of the principal's queued or running Arsenkin job."
+      "description": "Request cancellation of your queued/running job. Use when the user aborts; already spent limits may not return."
     }
   }
 }

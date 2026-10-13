@@ -1,0 +1,27 @@
+{
+  "name": "arsenkin",
+  "version": "0.4.0",
+  "description": "Arsenkin SEO tools (clustering, SERP, Wordstat, indexation...) with approval-gated jobs and agent skills",
+  "author": {
+    "name": "ZAI.ONE",
+    "url": "https://github.com/zai-one"
+  },
+  "homepage": "https://github.com/zai-one/arsenkin-mcp",
+  "repository": "https://github.com/zai-one/arsenkin-mcp",
+  "license": "LicenseRef-ZAI-ONE",
+  "skills": "./skills/",
+  "mcpServers": {
+    "arsenkin": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/zai-one/arsenkin-mcp",
+        "arsenkin-mcp"
+      ],
+      "env": {
+        "ARSENKIN_TOKEN_FILE": "${ARSENKIN_TOKEN_FILE}",
+        "ARSENKIN_STATE_PATH": "${ARSENKIN_STATE_PATH}"
+      }
+    }
+  }
+}

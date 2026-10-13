@@ -7,6 +7,7 @@ from fastmcp import Client
 from test_runtime import FixtureHttp
 
 from zai_arsenkin import __version__, update_check
+from zai_arsenkin.agent_profile import PROFILE
 from zai_arsenkin.server import create_server
 
 TOOL = "arsenkin_check_update"
@@ -188,7 +189,7 @@ def test_injected_tag_never_reaches_result_cache_or_instructions(tmp_path, confi
     forced = update_check.check_update(cache, force=True, fetch=lambda: payload, now=time.time() + 120)
     assert "curl" not in json.dumps(forced)
     assert update_check.cached_hint(cache) is None
-    assert create_server(config, transport="stdio").instructions is None
+    assert create_server(config, transport="stdio").instructions == PROFILE.router
 
 
 @pytest.mark.parametrize(
@@ -208,7 +209,7 @@ def test_tampered_cache_is_ignored(tmp_path, config, tampered):
     good = {"latest_version": "99.0.0", "release_url": RELEASE["html_url"], "checked_at": time.time()}
     cache.write_text(json.dumps({**good, **tampered}))
     assert update_check.cached_hint(cache) is None
-    assert create_server(config, transport="stdio").instructions is None
+    assert create_server(config, transport="stdio").instructions == PROFILE.router
     result = update_check.check_update(cache, now=time.time())  # default fetcher is patched to no_network
     assert result["status"] == "unavailable" and "last_known" not in result
     assert "curl" not in json.dumps(result) and "Ignore" not in json.dumps(result)
@@ -245,4 +246,4 @@ async def test_tool_hint_and_diagnostics_use_cache_without_blocking(config, monk
 
 
 def test_no_hint_without_cache(config):
-    assert create_server(config, transport="stdio").instructions is None
+    assert create_server(config, transport="stdio").instructions == PROFILE.router

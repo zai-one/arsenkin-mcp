@@ -1,0 +1,7 @@
+---
+description: How to use the Arsenkin MCP tools safely and cheaply
+alwaysApply: false
+---
+- Read `arsenkin://playbook` before multi-step Arsenkin work; skills live in `skills/` (SKILL.md + references).
+- Never guess IDs: list first. Follow each tool's Cost/Writes line; paid or write calls need the user's explicit OK.
+- Prefer compact outputs (summary/matrix/fields); request full detail only when needed.
