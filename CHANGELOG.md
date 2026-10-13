@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Projects writes, semantics -> clusters -> positions, router eval
+
+- API re-check (help.arsenkin.ru/api, projects-api, 2026-10): all 19 job profiles were already covered; Projects API gaps closed.
+- `arsenkin_projects`: new reports `group` (by id) and `tags`; keyword filters `tag_ids`, `tag_mode`, `without_tags`, `is_deleted`; positions for several regions (`project_region_ids`), `group_ids`, `with_snippets`.
+- New opt-in toolset `projects_write` (off by default; default tool list and token budget unchanged): `arsenkin_projects_write` — `create_project`, `create_group`, `add_keywords`, `add_region`, `add_competitor`, paid `run_positions`. Additive only (no PUT/DELETE); returns a free preview of the exact body until `confirm=true`; scope `arsenkin:execute`.
+- Skill `arsenkin-semantic-core` (self-contained semantics -> clusters -> positions), guide `arsenkin://guide/projects`, prompt `semantic_core`.
+- Router: one line per intent (RU/EN -> first tool; skill; guide) with `arsenkin://playbook` and the generated `arsenkin://guide/tool-map` as fallbacks; `ARSENKIN_TOOLSETS=default|all`.
+- `tests/test_routing_eval.py` + `tests/evals/routing_cases.json` (17 RU/EN requests): fails if any tool, skill or guide is unreachable.
+
 ## 0.5.0
 
 - License: LicenseRef-ZAI-ONE 2.0 (source-available). Free install and use for yourself and your organisation, including commercial work; issues and pull requests welcome; copying code into other projects, redistribution, embedding and competing hosted services need written permission. Earlier releases keep their LicenseRef-ZAI-ONE 1.0 terms (see NOTICE). README first screen: one-line scope, why this MCP, maintenance and update check.

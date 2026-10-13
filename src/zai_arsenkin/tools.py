@@ -5,8 +5,9 @@ from typing import Any, Literal
 from uuid import UUID
 
 from zai_arsenkin.adapter import build_batch_plan, estimate_cost
+from zai_arsenkin.errors import safe_provider_error
 from zai_arsenkin.models import validate_request_hashes
-from zai_arsenkin.projects import projects_request
+from zai_arsenkin.projects import projects_request, projects_write_request
 from zai_arsenkin.update_check import CACHE_FILE, cached_hint, check_update
 
 # MCP tool annotations; enforcement (scopes, approvals, budgets) stays server-side.
@@ -21,6 +22,17 @@ LOCAL_PREPARE = {
 }
 # Queues an approved paid provider task; idempotency_key replays return the same job.
 PAID_SUBMIT = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": True}
+# Additive Projects API writes; run_positions spends limits. Free preview until confirm=true.
+PROJECT_WRITE = {
+    "readOnlyHint": False,
+    "destructiveHint": False,
+    "idempotentHint": False,
+    "openWorldHint": True,
+}
+CONFIRM_HINT = (
+    "Preview only, nothing sent. Show this change (and for run_positions the arsenkin_limits cost) "
+    "to the user and repeat with confirm=true only after an explicit OK."
+)
 CANCEL = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": True}
 
 
@@ -89,6 +101,8 @@ def register_tools(server: Any, runtime: Any) -> None:
             "competitors",
             "keywords",
             "groups",
+            "group",
+            "tags",
             "positions",
             "chart_visibility",
             "chart_top_statistics",
@@ -102,6 +116,13 @@ def register_tools(server: Any, runtime: Any) -> None:
         group_id: int | None = None,
         parent_id: int | None = None,
         keyword_ids: list[int] | None = None,
+        project_region_ids: list[int] | None = None,
+        group_ids: list[int] | None = None,
+        tag_ids: list[int] | None = None,
+        tag_mode: Literal["include", "exclude"] | None = None,
+        without_tags: bool | None = None,
+        is_deleted: bool | None = None,
+        with_snippets: bool | None = None,
         position_from: int | None = None,
         position_to: int | None = None,
         sort: Literal["scan_date", "-scan_date"] | None = None,
@@ -114,8 +135,9 @@ def register_tools(server: Any, runtime: Any) -> None:
     ) -> dict[str, Any]:
         """Read saved Arsenkin SEO projects data (Projects API v1); never starts paid position checks.
 
-        report=projects lists projects. With project_id: project, regions, competitors, keywords,
-        groups, positions (saved positions; filter by project_region_id, dates, groups, keyword_ids,
+        report=projects lists projects. With project_id: project, regions, competitors, keywords
+        (tag filters), groups, group (group_id), tags, positions (saved positions; filter by
+        project_region_id or project_region_ids, dates, groups, keyword_ids,
         position_from/to) and charts (chart_visibility, chart_top_statistics, chart_average_position,
         chart_median_position) that require project_region_id from report=project or regions.
         """
@@ -126,6 +148,13 @@ def register_tools(server: Any, runtime: Any) -> None:
             "group_id": group_id,
             "parent_id": parent_id,
             "keyword_ids": keyword_ids,
+            "project_region_ids": project_region_ids,
+            "group_ids": group_ids,
+            "tag_ids": tag_ids,
+            "tag_mode": tag_mode,
+            "without_tags": without_tags,
+            "is_deleted": is_deleted,
+            "with_snippets": with_snippets,
             "position_from": position_from,
             "position_to": position_to,
             "sort": sort,
@@ -142,6 +171,71 @@ def register_tools(server: Any, runtime: Any) -> None:
             {"report": report, "project_id": project_id, **optional},
             lambda: registry.arsenkin_projects().get(report, project_id, **optional),
             validate=lambda: projects_request(report, project_id, **optional),
+        )
+
+    @server.tool(auth=require_scopes("arsenkin:execute"), annotations=PROJECT_WRITE)
+    async def arsenkin_projects_write(
+        action: Literal[
+            "create_project", "add_keywords", "create_group", "add_region", "add_competitor", "run_positions"
+        ],
+        project_id: int | None = None,
+        domain: str | None = None,
+        name: str | None = None,
+        keywords: list[str] | None = None,
+        group_id: int | None = None,
+        parent_id: int | None = None,
+        url: str | None = None,
+        tags: list[str] | None = None,
+        region_id: int | None = None,
+        device: Literal["desktop", "mobile"] | None = None,
+        depth: int | None = None,
+        engine_type: int | None = None,
+        project_region_ids: list[int] | None = None,
+        group_ids: list[int] | None = None,
+        keyword_ids: list[int] | None = None,
+        sagging_positions: bool | None = None,
+        confirm: bool = False,
+    ) -> dict[str, Any]:
+        """Add to Arsenkin SEO projects: create project, add keywords/group/region/competitor, run positions.
+
+        Additive only (no edits/deletes). run_positions queues a paid position check (limits are
+        charged on queueing); poll arsenkin_projects(report=project) status_name, then positions.
+        Without confirm=true returns a free preview of the exact request.
+        """
+        arguments = {
+            "domain": domain,
+            "name": name,
+            "keywords": keywords,
+            "group_id": group_id,
+            "parent_id": parent_id,
+            "url": url,
+            "tags": tags,
+            "region_id": region_id,
+            "device": device,
+            "depth": depth,
+            "engine_type": engine_type,
+            "project_region_ids": project_region_ids,
+            "group_ids": group_ids,
+            "keyword_ids": keyword_ids,
+            "sagging_positions": sagging_positions,
+        }
+        try:
+            method, path, body = projects_write_request(action, project_id, **arguments)
+        except ValueError as exc:
+            raise safe_provider_error("arsenkin", exc) from None
+        if confirm is not True:
+            return {
+                "needs_confirmation": True,
+                "method": method,
+                "path": path,
+                "body": body,
+                "hint": CONFIRM_HINT,
+            }
+        return await _provider_read(
+            "arsenkin",
+            f"projects_write_{action}",
+            {"action": action, "project_id": project_id, **arguments},
+            lambda: registry.arsenkin_projects().write(action, project_id, **arguments),
         )
 
     @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)

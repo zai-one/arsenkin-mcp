@@ -12,6 +12,12 @@ Arsenkin jobs spend account limits; Projects data is free.
 5. **Poll** — `arsenkin_task_status` every 30–60 s; jobs run in the background worker.
 6. **Read compactly** — `arsenkin_result_table` (serp_urls / serp_hosts / clusters) or
    `arsenkin_export_result` (CSV/JSONL); `arsenkin_get_result` only for small jobs.
-7. **Projects** — `arsenkin_projects` for saved positions/charts; never starts checks.
+7. **Projects** — `arsenkin_projects` for saved positions/charts (free); opt-in `arsenkin_projects_write`
+   to create projects, add keywords/groups/regions/competitors and run a paid position check
+   (`arsenkin://guide/projects`).
+8. **Semantics → clusters → positions** — skill `arsenkin-semantic-core`: `wordstat-phrases` →
+   `wordstat-frequency` → `clustering` → project groups + `run_positions` (or one-off `positions`).
 
-Skills: `arsenkin-serp-clustering`, `arsenkin-index-check`, `arsenkin-text-relevance`.
+Skills: `arsenkin-serp-clustering`, `arsenkin-index-check`, `arsenkin-text-relevance`, `arsenkin-semantic-core`.
+Guides: `arsenkin://guide/tools`, `arsenkin://guide/clustering-params`, `arsenkin://guide/projects`,
+`arsenkin://guide/errors`, `arsenkin://guide/tool-map` (every tool by toolset).

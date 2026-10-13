@@ -1,8 +1,9 @@
-"""Read-only Arsenkin Projects API v1 (https://help.arsenkin.ru/projects-api).
+"""Arsenkin Projects API v1 (https://help.arsenkin.ru/projects-api).
 
-Only documented GET endpoints are reachable. Creating, editing or deleting projects,
-regions, competitors, keywords, groups or tags, and the paid POST /positions/run, are
-deliberately absent.
+Reads: documented GET endpoints. Writes (opt-in toolset projects_write): only additive
+calls - create project, add keywords/group/region/competitor - and the paid
+POST /positions/run, each behind a free preview and confirm=true. Edits and deletes
+(PUT/DELETE projects, regions, competitors, keywords, groups, tags) stay absent.
 """
 
 from __future__ import annotations
@@ -25,17 +26,24 @@ REPORTS: dict[str, tuple[str, frozenset[str], frozenset[str]]] = {
     "competitors": ("/projects/{id}/competitors", frozenset(), frozenset()),
     "keywords": (
         "/projects/{id}/keywords",
-        frozenset({"group_id", "search", "per_page", "page"}),
+        frozenset(
+            {"group_id", "search", "per_page", "page", "tag_ids", "tag_mode", "without_tags", "is_deleted"}
+        ),
         frozenset(),
     ),
+    "group": ("/projects/{id}/groups/{group_id}", frozenset({"group_id"}), frozenset({"group_id"})),
+    "tags": ("/projects/{id}/tags", frozenset(), frozenset()),
     "groups": ("/projects/{id}/groups", frozenset({"parent_id", "search", "per_page", "page"}), frozenset()),
     "positions": (
         "/projects/{id}/positions",
         frozenset(
             {
                 "project_region_id",
+                "project_region_ids",
                 "keyword_ids",
                 "group_id",
+                "group_ids",
+                "with_snippets",
                 "start_date",
                 "end_date",
                 "position_from",
@@ -106,6 +114,11 @@ def projects_request(
     missing = sorted(required - set(supplied))
     if missing:
         raise ValueError(f"{report} requires: " + ", ".join(missing))
+    if "{group_id}" in template:
+        path = template.format(
+            id=_int(project_id, "project_id"), group_id=_int(supplied["group_id"], "group_id")
+        )
+        return path, {}
     if "{id}" in template:
         path = template.format(id=_int(project_id, "project_id"))
     elif project_id is not None:
@@ -140,11 +153,104 @@ def projects_request(
         if not isinstance(ids, list) or not 1 <= len(ids) <= 500:
             raise ValueError("keyword_ids must be a list of 1-500 IDs")
         params["keyword_ids"] = ",".join(str(_int(item, "keyword_ids")) for item in dict.fromkeys(ids))
+    for field in ("project_region_ids", "group_ids", "tag_ids"):
+        if field in supplied:
+            ids = supplied[field]
+            if not isinstance(ids, list) or not 1 <= len(ids) <= 100:
+                raise ValueError(f"{field} must be a list of 1-100 IDs")
+            params[field] = ",".join(str(_int(item, field)) for item in dict.fromkeys(ids))
+    if "tag_mode" in supplied:
+        if supplied["tag_mode"] not in {"include", "exclude"}:
+            raise ValueError("tag_mode must be include or exclude")
+        params["tag_mode"] = supplied["tag_mode"]
+    for field in ("without_tags", "is_deleted", "with_snippets"):
+        if field in supplied:
+            if not isinstance(supplied[field], bool):
+                raise ValueError(f"{field} must be a boolean")
+            params[field] = int(supplied[field])
     if "sort" in supplied:
         if supplied["sort"] not in {"scan_date", "-scan_date"}:
             raise ValueError("sort must be scan_date or -scan_date")
         params["sort"] = supplied["sort"]
     return path, params
+
+
+# Additive Projects API writes (opt-in toolset projects_write). Deletes and edits stay absent.
+WRITE_ACTIONS = (
+    "create_project",
+    "add_keywords",
+    "create_group",
+    "add_region",
+    "add_competitor",
+    "run_positions",
+)
+_URL = re.compile(r"https?://[^\s]{1,2040}\Z")
+
+
+def _url(value: object, field: str) -> str:
+    if not isinstance(value, str) or _URL.fullmatch(value.strip()) is None:
+        raise ValueError(f"{field} must be an http(s) URL")
+    return value.strip()
+
+
+def projects_write_request(
+    action: str, project_id: int | None = None, **arguments: Any
+) -> tuple[str, str, dict[str, Any]]:
+    """Validate one additive Projects API write and return (method, path, JSON body) offline."""
+    a = {key: value for key, value in arguments.items() if value is not None and value != []}
+    if action == "create_project":
+        body: dict[str, Any] = {"domain": _url(a.get("domain"), "domain")}
+        if "name" in a:
+            body["name"] = _text(a["name"], "name")
+        return "POST", "/projects", body
+    if action not in WRITE_ACTIONS:
+        raise ValueError("action must be one of: " + ", ".join(WRITE_ACTIONS))
+    base = f"/projects/{_int(project_id, 'project_id')}"
+    if action == "add_keywords":
+        words = a.get("keywords")
+        if not isinstance(words, list) or not 1 <= len(words) <= 10_000:
+            raise ValueError("keywords must be a list of 1-10000 phrases")
+        body = {"keywords": list(dict.fromkeys(_text(word, "keywords", 512) for word in words))}
+        if "group_id" in a:
+            body["group_id"] = _int(a["group_id"], "group_id")
+        if "url" in a:
+            body["url"] = _url(a["url"], "url")
+        if "tags" in a:
+            tags = a["tags"]
+            if not isinstance(tags, list) or len(tags) > 50:
+                raise ValueError("tags must be at most 50 names")
+            body["tags"] = [_text(tag, "tags", 64) for tag in tags]
+        return "POST", f"{base}/keywords", body
+    if action == "create_group":
+        body = {"name": _text(a.get("name"), "name"), "active": True}
+        if "parent_id" in a:
+            body["parent_id"] = _int(a["parent_id"], "parent_id")
+        if "url" in a:
+            body["url"] = _url(a["url"], "url")
+        return "POST", f"{base}/groups", body
+    if action == "add_region":
+        device = a.get("device", "desktop")
+        if device not in {"desktop", "mobile"}:
+            raise ValueError("device must be desktop or mobile")
+        body = {
+            "region_id": _int(a.get("region_id"), "region_id"),
+            "device": device,
+            "depth": _int(a.get("depth", 100), "depth", 10, 100),
+            "engine_type": _int(a.get("engine_type", 0), "engine_type", 0, 1),
+        }
+        return "POST", f"{base}/regions", body
+    if action == "add_competitor":
+        return "POST", f"{base}/competitors", {"url": _url(a.get("url"), "url")}
+    body = {}
+    for field in ("project_region_ids", "group_ids", "keyword_ids"):
+        if field in a:
+            ids = a[field]
+            if not isinstance(ids, list) or not 1 <= len(ids) <= 10_000:
+                raise ValueError(f"{field} must be a list of IDs")
+            body[field] = [_int(item, field) for item in dict.fromkeys(ids)]
+    if a.get("sagging_positions") is True:
+        body["sagging_positions"] = True
+    return "POST", f"{base}/positions/run", body
 
 
 class ArsenkinProjectsAdapter:
@@ -176,3 +282,15 @@ class ArsenkinProjectsAdapter:
 
         key = request_hash({"provider": "arsenkin_projects", "path": path, "params": params})
         return await self.coalescer.run(key, fetch)
+
+    async def write(self, action: str, project_id: int | None = None, **arguments: Any) -> dict[str, Any]:
+        method, path, body = projects_write_request(action, project_id, **arguments)
+        if not self.token:
+            raise ProviderError("Arsenkin token is not configured")
+        return await self.http.request(
+            method,
+            f"{self.base_url}{path}",
+            headers={"X-Api-Token": self.token, "Accept": "application/json"},
+            payload=body,
+            idempotent=False,
+        )

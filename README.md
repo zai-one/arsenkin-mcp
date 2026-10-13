@@ -155,10 +155,13 @@ and open the other files on demand. Clients without skills get the same flows as
 | `arsenkin-serp-clustering` | Cluster keywords by SERP overlap: estimate, approval, submit, poll, clusters table. |
 | `arsenkin-index-check` | Yandex/Google indexation of URLs with a non-indexed report. |
 | `arsenkin-text-relevance` | LSI/highlights, Title/H1 of the TOP vs your page, optional copywriting brief. |
+| `arsenkin-semantic-core` | Semantics -> clusters -> positions: Wordstat phrases/frequency, clustering, project groups and a position check. |
 
 ## Toolsets and read-only mode
 
-`ARSENKIN_TOOLSETS=all` (default) or a comma list (see `arsenkin://toolsets`); `ARSENKIN_TOOLS=a,b` adds single tools,
+Default: `meta`, `jobs`, `results`, `projects`. Opt-in `projects_write` (`arsenkin_projects_write`: create
+project, add keywords/groups/regions/competitors, run a paid position check; free preview until
+`confirm=true`). `ARSENKIN_TOOLSETS=default`, `all` or a comma list (see `arsenkin://toolsets`); `ARSENKIN_TOOLS=a,b` adds single tools,
 `ARSENKIN_DISABLED_TOOLS=a,b` removes them, `ARSENKIN_READ_ONLY=1` removes every write/paid tool.
 
 ## Example requests

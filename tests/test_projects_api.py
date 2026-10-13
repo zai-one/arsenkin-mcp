@@ -107,3 +107,43 @@ async def test_projects_and_limits_tools_are_read_only(config):
         ("GET", "/projects/7/charts/visibility", {"project_region_id": 5})
     ]
     assert ProjectsHttp.calls == ["info"]
+
+
+def test_new_project_reads_and_additive_writes():
+    from zai_arsenkin.projects import projects_write_request
+
+    assert projects_request("group", 7, group_id=3) == ("/projects/7/groups/3", {})
+    path, params = projects_request("positions", 7, project_region_ids=[5, 6], with_snippets=True)
+    assert params == {"project_region_ids": "5,6", "with_snippets": 1}
+    assert projects_request("keywords", 7, tag_ids=[1], tag_mode="exclude")[1] == {
+        "tag_ids": "1",
+        "tag_mode": "exclude",
+    }
+    assert projects_write_request("add_keywords", 7, keywords=["a", "a", "b"], group_id=2) == (
+        "POST",
+        "/projects/7/keywords",
+        {"keywords": ["a", "b"], "group_id": 2},
+    )
+    assert projects_write_request("run_positions", 7)[1] == "/projects/7/positions/run"
+    with pytest.raises(ValueError):
+        projects_write_request("create_project", domain="not a url")
+    with pytest.raises(ValueError):
+        projects_write_request("delete_project", 7)
+
+
+async def test_projects_write_previews_until_confirmed(config, monkeypatch):
+    monkeypatch.setenv("ARSENKIN_TOOLSETS", "all")
+    server = create_server(config, transport="stdio", http_factory=ProjectsHttp)
+    async with Client(server) as client:
+        tools = {tool.name: tool for tool in await client.list_tools()}
+        assert tools["arsenkin_projects_write"].annotations.destructiveHint is False
+        preview = (
+            await client.call_tool("arsenkin_projects_write", {"action": "run_positions", "project_id": 7})
+        ).data
+        assert preview["needs_confirmation"] is True and ProjectsHttp.seen == []
+        await client.call_tool(
+            "arsenkin_projects_write", {"action": "run_positions", "project_id": 7, "confirm": True}
+        )
+    assert [(m, u.rsplit("/v1", 1)[1]) for m, u, _, _ in ProjectsHttp.seen] == [
+        ("POST", "/projects/7/positions/run")
+    ]
