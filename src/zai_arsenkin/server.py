@@ -11,6 +11,9 @@ from fastmcp import FastMCP
 from fastmcp.server.auth.providers.jwt import JWTVerifier
 
 from zai_arsenkin import __version__
+from zai_arsenkin.agent_layer import apply as apply_agent_layer
+from zai_arsenkin.agent_layer import router_instructions
+from zai_arsenkin.agent_profile import PROFILE
 from zai_arsenkin.config import ServiceConfig
 from zai_arsenkin.onboarding import check_config, load_config
 from zai_arsenkin.runtime import Runtime
@@ -58,11 +61,12 @@ def create_server(
         version=__version__,
         auth=auth,
         mask_error_details=True,
-        instructions=cached_hint(config.state_path.parent / CACHE_FILE),
+        instructions=router_instructions(PROFILE, cached_hint(config.state_path.parent / CACHE_FILE)),
     )
     runtime = Runtime(config, transport, http_factory)
     registrar = ToolRegistrar(server, runtime)
     register_tools(registrar, runtime)
+    apply_agent_layer(server, PROFILE)
     return server
 
 

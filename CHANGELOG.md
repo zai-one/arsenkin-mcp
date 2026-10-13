@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Agent layer: router `instructions` (≤1200 chars) describing the estimate → prepare → explicit OK → submit → poll → result job pattern; compact template descriptions with `Cost:` lines and titles.
+- Toolsets `meta`, `jobs`, `results`, `projects` (`ARSENKIN_TOOLSETS`, `ARSENKIN_TOOLS`, `ARSENKIN_DISABLED_TOOLS`, `ARSENKIN_READ_ONLY`); `arsenkin://toolsets`.
+- Resources `arsenkin://playbook`, `arsenkin://guide/{tools,clustering-params,errors}` ("which profile when" table covering all 19 documented API tools); prompts `cluster_keywords`, `index_check`, `text_relevance`.
+- Self-contained skills `arsenkin-serp-clustering`, `arsenkin-index-check`, `arsenkin-text-relevance` with references and templates; Claude Code plugin manifest, Cursor rule, `.agents/skills`.
+- `scripts/token_budget.py` + tests gate instruction, description and SKILL.md sizes.
+
 ## 0.4.0
 
 - `arsenkin_projects`: read-only Projects API v1 (projects, regions, competitors, keywords, groups, saved positions, visibility/top/average/median charts). `POST /positions/run` and all write endpoints stay unavailable.

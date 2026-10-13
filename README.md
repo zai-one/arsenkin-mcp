@@ -78,6 +78,83 @@ An estimate validates the request locally and shows the server cost estimate wit
 
 If tools do not appear, check the absolute path, whether the client can find `uv`, and the `--check-config` result. For access errors, check account credentials and permissions. [Installation and troubleshooting](INSTALL.md).
 
+
+<!-- agent-block:start -->
+## Install in your agent
+
+Run `arsenkin-mcp` straight from GitHub with [uv](https://docs.astral.sh/uv/). Pin a release tag (`@vX.Y.Z`) for
+reproducible installs; placeholders below are examples, keep secrets in files outside the repo.
+
+**Claude Code**
+
+```bash
+claude mcp add arsenkin --env ARSENKIN_TOKEN_FILE=/path/to/arsenkin.token --env ARSENKIN_STATE_PATH=/path/to/arsenkin.sqlite -- uvx --from git+https://github.com/zai-one/arsenkin-mcp arsenkin-mcp
+```
+
+Skills for Claude Code: copy `skills/*` into `~/.claude/skills/` (or install this repo as a plugin — it
+ships `.claude-plugin/plugin.json` with the skills and the MCP server).
+
+**Cursor** — `.cursor/mcp.json` ([one-click install](cursor://anysphere.cursor-deeplink/mcp/install?name=arsenkin&config=eyJjb21tYW5kIjogInV2eCIsICJhcmdzIjogWyItLWZyb20iLCAiZ2l0K2h0dHBzOi8vZ2l0aHViLmNvbS96YWktb25lL2Fyc2Vua2luLW1jcCIsICJhcnNlbmtpbi1tY3AiXSwgImVudiI6IHsiQVJTRU5LSU5fVE9LRU5fRklMRSI6ICIvcGF0aC90by9hcnNlbmtpbi50b2tlbiIsICJBUlNFTktJTl9TVEFURV9QQVRIIjogIi9wYXRoL3RvL2Fyc2Vua2luLnNxbGl0ZSJ9fQ==)):
+
+```json
+{
+  "mcpServers": {
+    "arsenkin": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/zai-one/arsenkin-mcp",
+        "arsenkin-mcp"
+      ],
+      "env": {
+        "ARSENKIN_TOKEN_FILE": "/path/to/arsenkin.token",
+        "ARSENKIN_STATE_PATH": "/path/to/arsenkin.sqlite"
+      }
+    }
+  }
+}
+```
+
+**Codex** — `~/.codex/config.toml` (skills: copy `skills/*` into `~/.codex/skills/`, or keep the
+repo's `.agents/skills` link):
+
+```toml
+[mcp_servers.arsenkin]
+command = "uvx"
+args = ["--from", "git+https://github.com/zai-one/arsenkin-mcp", "arsenkin-mcp"]
+env = { ARSENKIN_TOKEN_FILE = "/path/to/arsenkin.token", ARSENKIN_STATE_PATH = "/path/to/arsenkin.sqlite" }
+```
+
+**Claude Desktop** — `claude_desktop_config.json`: the same `mcpServers` block as Cursor.
+
+## Skills (agent playbooks)
+
+Each skill is a self-contained folder `skills/<name>/` (`SKILL.md` + its own `references/`,
+`templates/`); copy the folder and it works. Agents load the short `SKILL.md` only when the task matches
+and open the other files on demand. Clients without skills get the same flows as MCP prompts and the
+`arsenkin://playbook` / `arsenkin://guide/{topic}` resources.
+
+| Skill | What it does |
+|---|---|
+| `arsenkin-serp-clustering` | Cluster keywords by SERP overlap: estimate, approval, submit, poll, clusters table. |
+| `arsenkin-index-check` | Yandex/Google indexation of URLs with a non-indexed report. |
+| `arsenkin-text-relevance` | LSI/highlights, Title/H1 of the TOP vs your page, optional copywriting brief. |
+
+## Toolsets and read-only mode
+
+`ARSENKIN_TOOLSETS=all` (default) or a comma list (see `arsenkin://toolsets`); `ARSENKIN_TOOLS=a,b` adds single tools,
+`ARSENKIN_DISABLED_TOOLS=a,b` removes them, `ARSENKIN_READ_ONLY=1` removes every write/paid tool.
+
+## Example requests
+
+- Сколько лимитов Arsenkin осталось?
+- Кластеризуй этот список запросов для Москвы — сначала покажи стоимость.
+- Проверь индексацию этих URL в Яндексе и Google.
+- Что ТОП ожидает в тексте по запросу «ремонт киа»?
+- Покажи сохранённые позиции проекта за месяц.
+- Выгрузи результат задачи в CSV.
+<!-- agent-block:end -->
+
 ## Access and limits
 
 For execution, configure paid-task limits and approval, then run the worker with the same config and SQLite state. Exported values keep their JSON paths; specialised SEO tables are not generated automatically. Cancelling a job does not guarantee a refund for work already submitted.
