@@ -3,12 +3,12 @@
 ## Install a release package
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/) and download the
-wheel `zai_arsenkin_mcp-0.4.0-py3-none-any.whl` plus `SHA256SUMS` from [v0.4.0](https://github.com/zai-one/arsenkin-mcp/releases/tag/v0.4.0).
+wheel `zai_arsenkin_mcp-0.5.0-py3-none-any.whl` plus `SHA256SUMS` from [v0.5.0](https://github.com/zai-one/arsenkin-mcp/releases/tag/v0.5.0).
 Compare the wheel's SHA-256 with the published checksum before installing it.
 The wheel is platform-independent; Python 3.12–3.14 is required.
 
 ```sh
-uv tool install "zai-arsenkin-mcp[standalone] @ https://github.com/zai-one/arsenkin-mcp/releases/download/v0.4.0/zai_arsenkin_mcp-0.4.0-py3-none-any.whl"
+uv tool install "zai-arsenkin-mcp[standalone] @ https://github.com/zai-one/arsenkin-mcp/releases/download/v0.5.0/zai_arsenkin_mcp-0.5.0-py3-none-any.whl"
 arsenkin-mcp-setup --directory /absolute/path/to/my-arsenkin-settings
 arsenkin-mcp --config /absolute/path/to/my-arsenkin-settings/mcp.local.json --check-config
 ```
@@ -108,7 +108,7 @@ The local configuration check never generates a signing key or an access token.
 
 ```sh
 uv build
-python -m pip install "dist/zai_arsenkin_mcp-0.4.0-py3-none-any.whl[standalone]"
+python -m pip install "dist/zai_arsenkin_mcp-0.5.0-py3-none-any.whl[standalone]"
 arsenkin-mcp --config /ABSOLUTE/PATH/mcp.local.json
 ```
 

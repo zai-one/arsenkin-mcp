@@ -2,7 +2,7 @@
 
 Самостоятельный MCP для Arsenkin: 11 исходных инструментов, API-адаптер,
 оценка и согласование платных запросов, очередь, batch, polling и отмена.
-Запускается без AI Kit и `mcp_platform`. Версия 0.2.0 включает экспорт сохранённых результатов;
+Запускается без AI Kit и `mcp_platform`. С версии 0.2.0 доступен экспорт сохранённых результатов;
 подключение к своему аккаунту выполняет оператор.
 
 ## Установка
@@ -17,7 +17,7 @@ uv build
 uv run arsenkin-mcp --transport stdio
 ```
 
-Wheel: `pip install './dist/zai_arsenkin_mcp-0.2.0-py3-none-any.whl[standalone]'`.
+Wheel: `pip install './dist/zai_arsenkin_mcp-0.5.0-py3-none-any.whl[standalone]'`.
 Extra `standalone` закрепляет FastMCP 3.4.4. Базовый wheel содержит код адаптера,
 инструментов и выполнения для композиции в платформе; версию FastMCP хоста
 он не меняет. Remote пока не настроен. Для точного воспроизведения wheel

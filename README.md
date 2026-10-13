@@ -36,7 +36,7 @@ Try asking your assistant:
 
 ## Maintained and up to date
 
-- Actively maintained by ZAI.ONE: current version 0.4.0; release notes in [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zai-one/arsenkin-mcp/releases).
+- Actively maintained by ZAI.ONE: current version 0.5.0; release notes in [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zai-one/arsenkin-mcp/releases).
 - Built-in update check: ask the assistant to run `arsenkin_check_update` (public GitHub API, no credentials, cached; nothing is installed automatically; `ARSENKIN_DISABLE_UPDATE_CHECK=1` turns it off).
 - Follows current MCP practice: tool annotations (read-only / destructive hints), toolsets and read-only mode, server `instructions`, prompts and resources, structured errors with recovery hints, secrets kept out of tool output, a token budget for tool descriptions enforced in tests.
 - CI runs the test suite on Linux and Windows for every pull request.
@@ -104,13 +104,13 @@ reproducible installs; placeholders below are examples, keep secrets in files ou
 **Claude Code**
 
 ```bash
-claude mcp add arsenkin --env ARSENKIN_TOKEN_FILE=/path/to/arsenkin.token --env ARSENKIN_STATE_PATH=/path/to/arsenkin.sqlite -- uvx --from git+https://github.com/zai-one/arsenkin-mcp arsenkin-mcp
+claude mcp add arsenkin --env ARSENKIN_TOKEN_FILE=/path/to/arsenkin.token --env ARSENKIN_STATE_PATH=/path/to/arsenkin.sqlite -- uvx --from git+https://github.com/zai-one/arsenkin-mcp@v0.5.0 arsenkin-mcp
 ```
 
 Skills for Claude Code: copy `skills/*` into `~/.claude/skills/` (or install this repo as a plugin — it
 ships `.claude-plugin/plugin.json` with the skills and the MCP server).
 
-**Cursor** — `.cursor/mcp.json` ([one-click install](cursor://anysphere.cursor-deeplink/mcp/install?name=arsenkin&config=eyJjb21tYW5kIjogInV2eCIsICJhcmdzIjogWyItLWZyb20iLCAiZ2l0K2h0dHBzOi8vZ2l0aHViLmNvbS96YWktb25lL2Fyc2Vua2luLW1jcCIsICJhcnNlbmtpbi1tY3AiXSwgImVudiI6IHsiQVJTRU5LSU5fVE9LRU5fRklMRSI6ICIvcGF0aC90by9hcnNlbmtpbi50b2tlbiIsICJBUlNFTktJTl9TVEFURV9QQVRIIjogIi9wYXRoL3RvL2Fyc2Vua2luLnNxbGl0ZSJ9fQ==)):
+**Cursor** — `.cursor/mcp.json` ([one-click install](cursor://anysphere.cursor-deeplink/mcp/install?name=arsenkin&config=eyJjb21tYW5kIjogInV2eCIsICJhcmdzIjogWyItLWZyb20iLCAiZ2l0K2h0dHBzOi8vZ2l0aHViLmNvbS96YWktb25lL2Fyc2Vua2luLW1jcEB2MC41LjAiLCAiYXJzZW5raW4tbWNwIl0sICJlbnYiOiB7IkFSU0VOS0lOX1RPS0VOX0ZJTEUiOiAiL3BhdGgvdG8vYXJzZW5raW4udG9rZW4iLCAiQVJTRU5LSU5fU1RBVEVfUEFUSCI6ICIvcGF0aC90by9hcnNlbmtpbi5zcWxpdGUifX0=)):
 
 ```json
 {
@@ -119,7 +119,7 @@ ships `.claude-plugin/plugin.json` with the skills and the MCP server).
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/zai-one/arsenkin-mcp",
+        "git+https://github.com/zai-one/arsenkin-mcp@v0.5.0",
         "arsenkin-mcp"
       ],
       "env": {
@@ -137,7 +137,7 @@ repo's `.agents/skills` link):
 ```toml
 [mcp_servers.arsenkin]
 command = "uvx"
-args = ["--from", "git+https://github.com/zai-one/arsenkin-mcp", "arsenkin-mcp"]
+args = ["--from", "git+https://github.com/zai-one/arsenkin-mcp@v0.5.0", "arsenkin-mcp"]
 env = { ARSENKIN_TOKEN_FILE = "/path/to/arsenkin.token", ARSENKIN_STATE_PATH = "/path/to/arsenkin.sqlite" }
 ```
 
