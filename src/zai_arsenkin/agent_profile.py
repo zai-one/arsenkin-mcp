@@ -138,4 +138,5 @@ PROFILE = Profile(
     prompts=PROMPTS,
     routes=ROUTES,
     optin=OPTIN,
+    lazy_core=("arsenkin_estimate",),
 )
