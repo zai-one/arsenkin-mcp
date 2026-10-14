@@ -30,7 +30,7 @@ Try asking your assistant:
 ## Why this MCP
 
 - Optional lazy tool loading: set `ARSENKIN_TOOL_LOADING=lazy` (or choose it in the setup wizard) to start with a small core and enable toolsets on demand; see [Lazy tool loading](#lazy-tool-loading).
-- Every paid job is estimated first and submitted only after approval; `arsenkin_limits` shows remaining limits.
+- Every paid job is estimated first, budget-checked and submitted only after approval (exception: the opt-in projects `run_positions`, see below); `arsenkin_limits` shows remaining limits.
 - Jobs run through a worker with tracked state; results are saved and exported as tables (JSON/CSV) with source pointers.
 - 18 default tools (meta, jobs, results, projects) plus opt-in `projects_write`, 4 prompts, guide resources and skills.
 - We found no other Arsenkin Tools MCP server on GitHub (search on 2026-10-13).
@@ -176,10 +176,14 @@ and open the other files on demand. Clients without skills get the same flows as
 
 Default: `meta`, `jobs`, `results`, `projects`. Opt-in `projects_write` (`arsenkin_projects_write`: create/update/delete
 projects, groups and tags, add/delete regions, competitors and keywords, `restore_keywords`, tag/untag groups
-and keywords, run a paid position check — the latter also needs the operator setting `ARSENKIN_PROJECTS_PAID=on`). Free preview until `confirm=true`; then every write returns an
+and keywords, run a paid position check — the latter also needs the operator setting `ARSENKIN_PROJECTS_PAID=on`;
+`run_positions` is **not** counted against the ARSENKIN monthly budgets or `ARSENKIN_MAX_COST_PER_APPROVAL` and has no
+cost estimate: its only gates are that setting and the operator approval). Free preview until `confirm=true`; then every write returns an
 `approval_id` and `operator_command`; the operator reviews the exact request with `arsenkin-projects-approval --path FILE --list`
 and accepts it outside MCP with the returned `arsenkin-projects-approval --path FILE --approval-id ID --digest D --accept`
-(single use, request-bound, bound to the preparing principal, 30 min) before the agent repeats the call with `approval_id`. `ARSENKIN_TOOLSETS=default`, `all` or a comma list (see `arsenkin://toolsets`); `ARSENKIN_TOOLS=a,b` adds single tools,
+(single use, request-bound, bound to the preparing principal and account, 30 min; at most 10 waiting per principal) before the agent repeats the call with `approval_id`.
+If a write was sent but its result is unknown (`code: outcome_unknown`), do not retry: check with `arsenkin_projects`,
+then the operator runs `arsenkin-projects-approval --path FILE --approval-id ID --resolve applied|not_applied`. `ARSENKIN_TOOLSETS=default`, `all` or a comma list (see `arsenkin://toolsets`); `ARSENKIN_TOOLS=a,b` adds single tools,
 `ARSENKIN_DISABLED_TOOLS=a,b` removes them, `ARSENKIN_READ_ONLY=1` removes every write/paid tool.
 
 ## Example requests
