@@ -29,7 +29,7 @@ Try asking your assistant:
 
 ## Why this MCP
 
-- Optional lazy tool loading: `ARSENKIN_TOOL_LOADING=lazy` starts with a small core plus `arsenkin_enable_toolsets` and adds toolsets on demand (`tools/list_changed`). Startup cost (tools/list + instructions, ≈chars/4): eager ≈3678 tokens, lazy ≈1281 tokens (−65%). Default `eager` is unchanged; if your client ignores `tools/list_changed`, keep `eager` or reconnect after enabling.
+- Optional lazy tool loading: `ARSENKIN_TOOL_LOADING=lazy` starts with a small core plus `arsenkin_enable_toolsets` and adds toolsets on demand (`tools/list_changed`). Startup cost (tools/list + instructions, ≈chars/4): eager ≈3678 tokens, lazy ≈1285 tokens (−65%). Default `eager` is unchanged; if your client ignores `tools/list_changed`, keep `eager` or reconnect after enabling. Scope: enablement is per MCP session (FastMCP session visibility), so one client's enabled toolsets never appear for another. The HTTP transport here is stateless (every request is its own session), so enabled toolsets do not persist there: for shared HTTP use `eager` or `ARSENKIN_TOOLSETS`.
 - Every paid job is estimated first and submitted only after approval; `arsenkin_limits` shows remaining limits.
 - Jobs run through a worker with tracked state; results are saved and exported as tables (JSON/CSV) with source pointers.
 - 18 default tools (meta, jobs, results, projects) plus opt-in `projects_write`, 4 prompts, guide resources and skills.
