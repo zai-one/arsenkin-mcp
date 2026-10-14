@@ -210,9 +210,9 @@ async def test_projects_write_previews_until_confirmed(config, monkeypatch):
             await client.call_tool("arsenkin_projects_write", {**args, "approval_id": ticket["approval_id"]})
         ).data
         assert refused["code"] == "approval_invalid" and ProjectsHttp.seen == []
-        from zai_arsenkin.project_approvals import ApprovalStore
+        from zai_arsenkin.project_approvals import ApprovalStore, approvals_path
 
-        store = ApprovalStore(config.state_path.with_name("arsenkin-projects-approvals.json"))
+        store = ApprovalStore(approvals_path(config.state_path))
         store.accept(ticket["approval_id"], ticket["digest"])
         other = {
             "action": "run_positions",
@@ -225,7 +225,7 @@ async def test_projects_write_previews_until_confirmed(config, monkeypatch):
         again = (
             await client.call_tool("arsenkin_projects_write", {**args, "approval_id": ticket["approval_id"]})
         ).data
-        assert again["code"] == "approval_invalid"  # single use
+        assert again["replayed"] is True  # single use: replays the saved result, no second call
     assert [(m, u.rsplit("/v1", 1)[1]) for m, u, _, _ in ProjectsHttp.seen] == [
         ("POST", "/projects/7/positions/run")
     ]
@@ -258,8 +258,11 @@ def test_concurrent_accept_cannot_resurrect_a_consumed_approval(tmp_path, monkey
     assert loaded.wait(5)
     store.consume(x["approval_id"], "arsenkin_projects_write", spent, "alice")
     operator.join()
-    with pytest.raises(PermissionError):  # still single use: no second paid run
-        store.consume(x["approval_id"], "arsenkin_projects_write", spent, "alice")
+    # Still single use: the second claim gets the dispatch record back, never a second paid run.
+    assert store.consume(x["approval_id"], "arsenkin_projects_write", spent, "alice") == {
+        "state": "dispatching",
+        "result": None,
+    }
     assert store.pending() == []  # y was accepted, not lost
 
 
@@ -301,3 +304,125 @@ async def test_projects_operator_command_works_from_any_directory(config, monkey
         ("POST", "/projects/7/groups")
     ]
     assert not (elsewhere / "state").exists()
+
+
+def _accept(config, ticket):
+    from zai_arsenkin.project_approvals import ApprovalStore, approvals_path
+
+    ApprovalStore(approvals_path(config.state_path)).accept(ticket["approval_id"], ticket["digest"])
+
+
+async def test_projects_approval_cannot_cross_state_databases_or_accounts(tmp_path, monkeypatch):
+    """Skeptic #1: /state/a.sqlite and /state/b.sqlite must not share an approval for project 7."""
+    from zai_arsenkin.config import ServiceConfig
+    from zai_arsenkin.project_approvals import ApprovalStore, approvals_path
+
+    monkeypatch.setenv("ARSENKIN_TOOLSETS", "all")
+    a = ServiceConfig(state_path=tmp_path / "a.sqlite", token="synthetic-a")
+    b = ServiceConfig(state_path=tmp_path / "b.sqlite", token="synthetic-b")
+    assert approvals_path(a.state_path) != approvals_path(b.state_path)
+    args = {"action": "delete_project", "project_id": 7, "confirm": True}
+    async with Client(create_server(a, transport="stdio", http_factory=ProjectsHttp)) as client:
+        ticket = (await client.call_tool("arsenkin_projects_write", args)).data
+    _accept(a, ticket)
+    async with Client(create_server(b, transport="stdio", http_factory=ProjectsHttp)) as client:
+        refused = (
+            await client.call_tool("arsenkin_projects_write", {**args, "approval_id": ticket["approval_id"]})
+        ).data
+    assert refused["code"] == "approval_invalid" and ProjectsHttp.seen == []
+    # Same file, different account binding (e.g. two accounts sharing one state DB): still refused.
+    request = {"project_id": 7, "method": "DELETE", "path": "/projects/7", "body": {}}
+    shared = tmp_path / "shared.json"
+    issued = ApprovalStore(shared, account="account-a").prepare("t", request, "DELETE", "alice")
+    ApprovalStore(shared).accept(issued["approval_id"], issued["digest"])
+    with pytest.raises(PermissionError):
+        ApprovalStore(shared, account="account-b").consume(issued["approval_id"], "t", request, "alice")
+
+
+class LostResponseHttp(ProjectsHttp):
+    failure: Exception | None = None
+
+    async def request(self, method, url, **kwargs):
+        result = await super().request(method, url, **kwargs)
+        if method != "GET" and LostResponseHttp.failure is not None:
+            raise LostResponseHttp.failure
+        return result
+
+
+async def test_lost_projects_write_response_is_unknown_not_retryable(config, monkeypatch, capsys):
+    """Skeptic #2: a sent write whose response is lost must not be re-runnable via a fresh approval."""
+    from zai_arsenkin import project_approvals
+    from zai_arsenkin.transport import ProviderTransportError
+
+    monkeypatch.setenv("ARSENKIN_TOOLSETS", "all")
+    monkeypatch.setenv("ARSENKIN_PROJECTS_PAID", "on")
+    LostResponseHttp.failure = ProviderTransportError("connection reset after send")
+    args = {"action": "run_positions", "project_id": 7, "confirm": True}
+    async with Client(create_server(config, transport="stdio", http_factory=LostResponseHttp)) as client:
+        ticket = (await client.call_tool("arsenkin_projects_write", args)).data
+        _accept(config, ticket)
+        apply = {**args, "approval_id": ticket["approval_id"]}
+        lost = (await client.call_tool("arsenkin_projects_write", apply)).data
+        assert lost["code"] == "outcome_unknown" and lost["retryable"] is False
+        assert (await client.call_tool("arsenkin_projects_write", apply)).data["code"] == "outcome_unknown"
+        blocked = (await client.call_tool("arsenkin_projects_write", args)).data
+        assert blocked["code"] == "outcome_unknown" and "approval_id" in blocked
+        assert "needs_operator_approval" not in blocked
+        assert len(ProjectsHttp.seen) == 1  # sent once; no second paid run
+        path = str(project_approvals.approvals_path(config.state_path))
+        assert project_approvals.main(["--path", path, "--list"], default_path=config.state_path) == 0
+        assert '"unknown"' in capsys.readouterr().out
+        resolve = ["--path", path, "--approval-id", ticket["approval_id"], "--resolve", "not_applied"]
+        assert project_approvals.main(resolve, default_path=config.state_path) == 0
+        LostResponseHttp.failure = None
+        again = (await client.call_tool("arsenkin_projects_write", args)).data
+        assert again["needs_operator_approval"] is True
+        _accept(config, again)
+        apply = {**args, "approval_id": again["approval_id"]}
+        done = (await client.call_tool("arsenkin_projects_write", apply)).data
+        replay = (await client.call_tool("arsenkin_projects_write", apply)).data
+    assert done == {"data": [{"id": 1}], "meta": {"current_page": 1}}
+    assert replay["replayed"] is True and replay["result"] == done  # idempotent replay, no new call
+    assert len(ProjectsHttp.seen) == 2
+
+
+async def test_definitely_rejected_projects_write_can_be_prepared_again(config, monkeypatch):
+    from zai_arsenkin.transport import ProviderHttpError
+
+    monkeypatch.setenv("ARSENKIN_TOOLSETS", "all")
+    LostResponseHttp.failure = ProviderHttpError(422)
+    args = {"action": "create_group", "project_id": 7, "name": "G", "confirm": True}
+    async with Client(create_server(config, transport="stdio", http_factory=LostResponseHttp)) as client:
+        ticket = (await client.call_tool("arsenkin_projects_write", args)).data
+        _accept(config, ticket)
+        with pytest.raises(ToolError):
+            await client.call_tool("arsenkin_projects_write", {**args, "approval_id": ticket["approval_id"]})
+        assert (await client.call_tool("arsenkin_projects_write", args)).data["needs_operator_approval"]
+    LostResponseHttp.failure = None
+
+
+async def test_projects_approval_preparation_is_bounded(config, monkeypatch, tmp_path):
+    """Skeptic #4: unaccepted confirm=true calls cannot grow the shared approval file without bound."""
+    from zai_arsenkin import project_approvals
+    from zai_arsenkin.project_approvals import ApprovalQuotaExceeded, ApprovalStore
+
+    monkeypatch.setenv("ARSENKIN_TOOLSETS", "all")
+    monkeypatch.setattr(project_approvals, "MAX_PENDING_PER_PRINCIPAL", 2)
+    async with Client(create_server(config, transport="stdio", http_factory=ProjectsHttp)) as client:
+        for name in ("a", "b"):
+            args = {"action": "create_group", "project_id": 7, "name": name, "confirm": True}
+            assert (await client.call_tool("arsenkin_projects_write", args)).data["needs_operator_approval"]
+        args = {"action": "create_group", "project_id": 7, "name": "c", "confirm": True}
+        full = (await client.call_tool("arsenkin_projects_write", args)).data
+    assert full["code"] == "approval_quota_exceeded" and full["retryable"] is False
+    store = ApprovalStore(tmp_path / "q.json")
+    store.prepare("t", {"x": 1}, "s", "bob")  # other principals keep their own quota
+    monkeypatch.setattr(project_approvals, "MAX_REQUEST_BYTES", 64)
+    with pytest.raises(ApprovalQuotaExceeded):
+        store.prepare("t", {"keywords": ["k" * 100]}, "s", "carol")
+    monkeypatch.setattr(project_approvals, "MAX_REQUEST_BYTES", 10_000)
+    monkeypatch.setattr(project_approvals, "MAX_STORE_BYTES", 2_000)
+    with pytest.raises(ApprovalQuotaExceeded):
+        for index in range(50):
+            store.prepare("t", {"keywords": ["k" * 300]}, "s", f"p{index}")
+    assert (tmp_path / "q.json").stat().st_size <= 2_000

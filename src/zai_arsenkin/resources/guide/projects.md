@@ -22,11 +22,12 @@ Writes (`arsenkin_projects_write`, opt-in toolset `projects_write`, `ARSENKIN_TO
 | `tag_groups` / `untag_groups` | project_id, group_ids, tag_ids | |
 | `tag_keywords` / `untag_keywords` | project_id, keyword_ids, tag_ids or system_tag | |
 | `add_competitor` | project_id, url | max 30 per project |
-| `run_positions` | project_id | paid; disabled unless the operator sets `ARSENKIN_PROJECTS_PAID=on` (`code: paid_disabled`); limits charged on queueing; narrow by project_region_ids/group_ids/keyword_ids; sagging_positions=true |
+| `run_positions` | project_id | paid; disabled unless the operator sets `ARSENKIN_PROJECTS_PAID=on` (`code: paid_disabled`); not counted against ARSENKIN monthly budgets or `ARSENKIN_MAX_COST_PER_APPROVAL`; limits charged on queueing; narrow by project_region_ids/group_ids/keyword_ids; sagging_positions=true |
 
 Every write: preview (no confirm, `needs_confirmation`, exact body) -> `confirm=true` returns
 `approval_id` + `operator_command` -> the operator (never the agent) runs it -> repeat the same call
-with `approval_id` (single use, request-bound, 30 min; `--list` shows the operator the exact request). `run_positions` additionally needs the operator
-setting `ARSENKIN_PROJECTS_PAID=on`; otherwise `code: paid_disabled` (use one-off `positions` instead).
+with `approval_id` (single use, request-bound, 30 min; `--list` shows the operator the exact request).
+`code: outcome_unknown` = sent, result lost: never retry; check with reads, the operator runs `--resolve`.
+`run_positions` additionally needs the operator setting `ARSENKIN_PROJECTS_PAID=on`; otherwise `code: paid_disabled` (use one-off `positions` instead).
 After `run_positions` poll `report=project` until `status_name=finished`, then `report=positions`.
 422 `scan_not_started` = already running / no phrases / no limits (nothing charged).
