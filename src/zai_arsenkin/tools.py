@@ -281,8 +281,12 @@ def register_tools(server: Any, runtime: Any) -> None:
                 "hint": CONFIRM_HINT,
             }
         request = {"project_id": project_id, "method": method, "path": path, "body": body}
+        # Bound to the preparing principal, like arsenkin_prepare approvals.
+        principal = runtime.state.get().actor
         if not approval_id:
-            ticket = project_approvals.prepare("arsenkin_projects_write", request, f"{method} {path}")
+            ticket = project_approvals.prepare(
+                "arsenkin_projects_write", request, f"{method} {path}", principal
+            )
             return {
                 "needs_operator_approval": True,
                 **ticket,
@@ -290,13 +294,12 @@ def register_tools(server: Any, runtime: Any) -> None:
                 "path": path,
                 "body": body,
                 "destructive": destructive,
-                "operator_command": f"arsenkin-projects-approval --approval-id {ticket['approval_id']} "
-                f"--digest {ticket['digest']} --accept",
+                "operator_command": project_approvals.operator_command("arsenkin-projects-approval", ticket),
                 "hint": "Show the change; the operator (not the agent) runs operator_command, then "
                 "repeat the same call with approval_id.",
             }
         try:
-            project_approvals.consume(approval_id, "arsenkin_projects_write", request)
+            project_approvals.consume(approval_id, "arsenkin_projects_write", request, principal)
         except PermissionError as exc:
             return {"ok": False, "code": "approval_invalid", "retryable": False, "error": str(exc)}
         return await _provider_read(

@@ -26,7 +26,7 @@ Writes (`arsenkin_projects_write`, opt-in toolset `projects_write`, `ARSENKIN_TO
 
 Every write: preview (no confirm, `needs_confirmation`, exact body) -> `confirm=true` returns
 `approval_id` + `operator_command` -> the operator (never the agent) runs it -> repeat the same call
-with `approval_id` (single use, request-bound, 30 min). `run_positions` additionally needs the operator
+with `approval_id` (single use, request-bound, 30 min; `--list` shows the operator the exact request). `run_positions` additionally needs the operator
 setting `ARSENKIN_PROJECTS_PAID=on`; otherwise `code: paid_disabled` (use one-off `positions` instead).
 After `run_positions` poll `report=project` until `status_name=finished`, then `report=positions`.
 422 `scan_not_started` = already running / no phrases / no limits (nothing charged).

@@ -1,9 +1,9 @@
 """Arsenkin Projects API v1 (https://help.arsenkin.ru/projects-api).
 
-Reads: documented GET endpoints. Writes (opt-in toolset projects_write): only additive
-calls - create project, add keywords/group/region/competitor - and the paid
-POST /positions/run, each behind a free preview and confirm=true. Edits and deletes
-(PUT/DELETE projects, regions, competitors, keywords, groups, tags) stay absent.
+Reads: documented GET endpoints. Writes (opt-in toolset projects_write): documented
+create/update/delete/tag calls and the paid POST /positions/run, each behind a free preview,
+confirm=true and a single-use operator approval (zai_arsenkin.project_approvals);
+run_positions also needs the operator setting ARSENKIN_PROJECTS_PAID=on.
 """
 
 from __future__ import annotations

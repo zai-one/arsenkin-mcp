@@ -229,3 +229,75 @@ async def test_projects_write_previews_until_confirmed(config, monkeypatch):
     assert [(m, u.rsplit("/v1", 1)[1]) for m, u, _, _ in ProjectsHttp.seen] == [
         ("POST", "/projects/7/positions/run")
     ]
+
+
+def test_concurrent_accept_cannot_resurrect_a_consumed_approval(tmp_path, monkeypatch):
+    """Server and operator CLI share one file: a stale operator write must not re-arm a spent approval."""
+    import threading
+    import time
+
+    from zai_arsenkin.project_approvals import ApprovalStore
+
+    store = ApprovalStore(tmp_path / "arsenkin-projects-approvals.json")
+    spent = {"project_id": 7, "method": "POST", "path": "/projects/7/positions/run", "body": {}}
+    x = store.prepare("arsenkin_projects_write", spent, "POST run", "alice")
+    y = store.prepare("arsenkin_projects_write", {"project_id": 8}, "DELETE", "alice")
+    store.accept(x["approval_id"], x["digest"])
+    loaded, original = threading.Event(), ApprovalStore._load
+
+    def slow_load(self):
+        data = original(self)
+        if threading.current_thread().name == "operator":
+            loaded.set()
+            time.sleep(0.3)  # the operator CLI read is in flight while the server consumes
+        return data
+
+    monkeypatch.setattr(ApprovalStore, "_load", slow_load)
+    operator = threading.Thread(target=store.accept, args=(y["approval_id"], y["digest"]), name="operator")
+    operator.start()
+    assert loaded.wait(5)
+    store.consume(x["approval_id"], "arsenkin_projects_write", spent, "alice")
+    operator.join()
+    with pytest.raises(PermissionError):  # still single use: no second paid run
+        store.consume(x["approval_id"], "arsenkin_projects_write", spent, "alice")
+    assert store.pending() == []  # y was accepted, not lost
+
+
+def test_projects_approval_is_bound_to_the_preparing_principal(tmp_path):
+    from zai_arsenkin.project_approvals import ApprovalStore
+
+    store = ApprovalStore(tmp_path / "a.json")
+    request = {"project_id": 7, "method": "DELETE", "path": "/projects/7", "body": {}}
+    ticket = store.prepare("arsenkin_projects_write", request, "DELETE /projects/7", "alice")
+    store.accept(ticket["approval_id"], ticket["digest"])
+    with pytest.raises(PermissionError):
+        store.consume(ticket["approval_id"], "arsenkin_projects_write", request, "bob")
+    store.consume(ticket["approval_id"], "arsenkin_projects_write", request, "alice")
+
+
+async def test_projects_operator_command_works_from_any_directory(config, monkeypatch, tmp_path, capsys):
+    import shlex
+    from pathlib import Path
+
+    from zai_arsenkin import project_approvals
+
+    monkeypatch.setenv("ARSENKIN_TOOLSETS", "all")
+    server = create_server(config, transport="stdio", http_factory=ProjectsHttp)
+    async with Client(server) as client:
+        args = {"action": "create_group", "project_id": 7, "name": "Диваны", "confirm": True}
+        ticket = (await client.call_tool("arsenkin_projects_write", args)).data
+        command = shlex.split(ticket["operator_command"])
+        assert command[0] == "arsenkin-projects-approval"
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)  # operator shell: other cwd, no ARSENKIN_STATE_PATH
+        default = Path("state/arsenkin-projects-approvals.json")
+        path = command[command.index("--path") + 1]
+        assert project_approvals.main(["--path", path, "--list"], default_path=default) == 0
+        assert "Диваны" in capsys.readouterr().out  # the operator sees the exact change
+        assert project_approvals.main(command[1:], default_path=default) == 0
+        await client.call_tool("arsenkin_projects_write", {**args, "approval_id": ticket["approval_id"]})
+    assert [(m, u.rsplit("/v1", 1)[1]) for m, u, _, _ in ProjectsHttp.seen] == [
+        ("POST", "/projects/7/groups")
+    ]
+    assert not (elsewhere / "state").exists()

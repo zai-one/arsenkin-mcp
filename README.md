@@ -177,8 +177,9 @@ and open the other files on demand. Clients without skills get the same flows as
 Default: `meta`, `jobs`, `results`, `projects`. Opt-in `projects_write` (`arsenkin_projects_write`: create/update/delete
 projects, groups and tags, add/delete regions, competitors and keywords, `restore_keywords`, tag/untag groups
 and keywords, run a paid position check — the latter also needs the operator setting `ARSENKIN_PROJECTS_PAID=on`). Free preview until `confirm=true`; then every write returns an
-`approval_id` that the operator accepts outside MCP with `arsenkin-projects-approval --approval-id ID --digest D
---accept` (single use, request-bound, 30 min) before the agent repeats the call with `approval_id`. `ARSENKIN_TOOLSETS=default`, `all` or a comma list (see `arsenkin://toolsets`); `ARSENKIN_TOOLS=a,b` adds single tools,
+`approval_id` and `operator_command`; the operator reviews the exact request with `arsenkin-projects-approval --path FILE --list`
+and accepts it outside MCP with the returned `arsenkin-projects-approval --path FILE --approval-id ID --digest D --accept`
+(single use, request-bound, bound to the preparing principal, 30 min) before the agent repeats the call with `approval_id`. `ARSENKIN_TOOLSETS=default`, `all` or a comma list (see `arsenkin://toolsets`); `ARSENKIN_TOOLS=a,b` adds single tools,
 `ARSENKIN_DISABLED_TOOLS=a,b` removes them, `ARSENKIN_READ_ONLY=1` removes every write/paid tool.
 
 ## Example requests
