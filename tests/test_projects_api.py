@@ -129,8 +129,59 @@ def test_new_project_reads_and_additive_writes():
     assert projects_request("groups", 7, tag_ids=[3, 4])[1]["tag_ids"] == "3,4"
     with pytest.raises(ValueError):
         projects_write_request("create_project", domain="not a url")
-    with pytest.raises(ValueError):
-        projects_write_request("delete_project", 7)
+    assert projects_write_request("delete_project", 7) == ("DELETE", "/projects/7", {})
+
+
+def test_projects_api_edits_deletes_and_tags_follow_docs():
+    from zai_arsenkin.projects import projects_write_request as w
+
+    assert w("update_project", 7, name="N") == ("PUT", "/projects/7", {"name": "N"})
+    assert w("delete_region", 7, target_id=3) == ("DELETE", "/projects/7/regions/3", {})
+    assert w("delete_competitor", 7, target_id=4)[1] == "/projects/7/competitors/4"
+    assert w("delete_keywords", 7, keyword_ids=[1, 1, 2]) == (
+        "DELETE",
+        "/projects/7/keywords",
+        {"keyword_ids": [1, 2]},
+    )
+    assert w("delete_keywords", 7, keyword_ids=[1], hard_delete=True)[2]["hard_delete"] is True
+    assert w("restore_keywords", 7, keyword_ids=[5]) == (
+        "POST",
+        "/projects/7/keywords/restore",
+        {"keyword_ids": [5]},
+    )
+    assert w("update_group", 7, group_id=2, parent_id=0, active=False) == (
+        "PUT",
+        "/projects/7/groups/2",
+        {"active": False, "parent_id": None},
+    )
+    assert w("delete_group", 7, group_id=2)[:2] == ("DELETE", "/projects/7/groups/2")
+    assert w("create_tag", 7, name="P", color="#EF4444") == (
+        "POST",
+        "/projects/7/tags",
+        {"name": "P", "color": "#EF4444"},
+    )
+    assert w("update_tag", 7, target_id=12, color="#22C55E")[:2] == ("PUT", "/projects/7/tags/12")
+    assert w("delete_tag", 7, target_id=12)[:2] == ("DELETE", "/projects/7/tags/12")
+    assert w("system_tag", 7) == ("POST", "/projects/7/tags/system", {})
+    assert w("untag_groups", 7, group_ids=[1], tag_ids=[12]) == (
+        "DELETE",
+        "/projects/7/groups/tags",
+        {"group_ids": [1], "tag_ids": [12]},
+    )
+    assert w("tag_keywords", 7, keyword_ids=[1], system_tag=True)[2] == {
+        "keyword_ids": [1],
+        "system_tag": True,
+    }
+    for bad in (
+        ("update_group", {"group_id": 2}),
+        ("create_tag", {"color": "#fff"}),
+        ("tag_groups", {"group_ids": [1]}),
+        ("delete_region", {}),
+    ):
+        with pytest.raises(ValueError):
+            w(bad[0], 7, **bad[1])
+    assert projects_request("groups", 7, with_children=False)[1] == {"with_children": 0}
+    assert projects_request("tag", 7, tag_id=12) == ("/projects/7/tags/12", {})
 
 
 async def test_projects_write_previews_until_confirmed(config, monkeypatch):
@@ -139,7 +190,7 @@ async def test_projects_write_previews_until_confirmed(config, monkeypatch):
     server = create_server(config, transport="stdio", http_factory=ProjectsHttp)
     async with Client(server) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
-        assert tools["arsenkin_projects_write"].annotations.destructiveHint is False
+        assert tools["arsenkin_projects_write"].annotations.destructiveHint is True
         # Paid run_positions bypasses the approval ledger: the agent's confirm=true is not enough.
         blocked = (
             await client.call_tool(
@@ -152,9 +203,29 @@ async def test_projects_write_previews_until_confirmed(config, monkeypatch):
             await client.call_tool("arsenkin_projects_write", {"action": "run_positions", "project_id": 7})
         ).data
         assert preview["needs_confirmation"] is True and ProjectsHttp.seen == []
-        await client.call_tool(
-            "arsenkin_projects_write", {"action": "run_positions", "project_id": 7, "confirm": True}
-        )
+        args = {"action": "run_positions", "project_id": 7, "confirm": True}
+        ticket = (await client.call_tool("arsenkin_projects_write", args)).data
+        assert ticket["needs_operator_approval"] is True and ProjectsHttp.seen == []
+        refused = (
+            await client.call_tool("arsenkin_projects_write", {**args, "approval_id": ticket["approval_id"]})
+        ).data
+        assert refused["code"] == "approval_invalid" and ProjectsHttp.seen == []
+        from zai_arsenkin.project_approvals import ApprovalStore
+
+        store = ApprovalStore(config.state_path.with_name("arsenkin-projects-approvals.json"))
+        store.accept(ticket["approval_id"], ticket["digest"])
+        other = {
+            "action": "run_positions",
+            "project_id": 8,
+            "confirm": True,
+            "approval_id": ticket["approval_id"],
+        }
+        assert (await client.call_tool("arsenkin_projects_write", other)).data["code"] == "approval_invalid"
+        await client.call_tool("arsenkin_projects_write", {**args, "approval_id": ticket["approval_id"]})
+        again = (
+            await client.call_tool("arsenkin_projects_write", {**args, "approval_id": ticket["approval_id"]})
+        ).data
+        assert again["code"] == "approval_invalid"  # single use
     assert [(m, u.rsplit("/v1", 1)[1]) for m, u, _, _ in ProjectsHttp.seen] == [
         ("POST", "/projects/7/positions/run")
     ]

@@ -2,6 +2,8 @@
 
 ## Unreleased — Projects writes, semantics -> clusters -> positions, router eval
 
+- Projects API edits/deletes per docs (PUT/DELETE projects, groups, tags; DELETE regions, competitors, keywords; keywords/restore; group/keyword tag assignment; groups `with_children`; single tag read). Every projects write, including paid `run_positions`, now needs an operator-accepted, request-bound approval (`arsenkin-projects-approval`).
+
 - API re-check (help.arsenkin.ru/api, projects-api, 2026-10): all 19 job profiles were already covered; Projects API gaps closed.
 - `arsenkin_projects`: new reports `group` (by id) and `tags`; keyword filters `tag_ids`, `tag_mode`, `without_tags`, `is_deleted`; positions for several regions (`project_region_ids`), `group_ids`, `with_snippets`.
 - `run_positions` is paid outside the `arsenkin_prepare` approval and monthly cost ledger, so it stays disabled (`paid_disabled`) until the operator sets `ARSENKIN_PROJECTS_PAID=on`; `groups` read accepts documented `tag_ids`.

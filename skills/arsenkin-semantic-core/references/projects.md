@@ -14,6 +14,16 @@ Writes (`arsenkin_projects_write`, opt-in toolset `projects_write`, `ARSENKIN_TO
 | `create_group` | project_id, name | parent_id for a subgroup (max 2 levels), url |
 | `add_keywords` | project_id, keywords (≤10 000) | group_id, url, tags (≤50) |
 | `add_region` | project_id, region_id | engine_type 0 Yandex/1 Google, device, depth 10–100 |
+| `update_project` / `delete_project` | project_id (+ name) | delete is destructive |
+| `delete_region` / `delete_competitor` / `delete_tag` | project_id, target_id | destructive |
+| `delete_keywords` / `restore_keywords` | project_id, keyword_ids | soft delete; hard_delete=true is final |
+| `update_group` / `delete_group` | project_id, group_id | name, active, parent_id (0 = root), url |
+| `create_tag` / `update_tag` | project_id, name/color `#RRGGBB` (update: target_id) | `system_tag` returns the system tag |
+| `tag_groups` / `untag_groups` | project_id, group_ids, tag_ids | |
+| `tag_keywords` / `untag_keywords` | project_id, keyword_ids, tag_ids or system_tag | |
+
+Every write: preview (no confirm) -> `confirm=true` returns `approval_id` + `operator_command` -> the
+operator (never the agent) runs it -> repeat the same call with `approval_id`.
 | `add_competitor` | project_id, url | max 30 per project |
 | `run_positions` | project_id | paid; disabled unless the operator sets `ARSENKIN_PROJECTS_PAID=on` (`code: paid_disabled`); limits charged on queueing; narrow by project_region_ids/group_ids/keyword_ids; sagging_positions=true |
 

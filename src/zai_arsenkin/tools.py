@@ -8,7 +8,13 @@ from uuid import UUID
 from zai_arsenkin.adapter import build_batch_plan, estimate_cost
 from zai_arsenkin.errors import safe_provider_error
 from zai_arsenkin.models import validate_request_hashes
-from zai_arsenkin.projects import projects_request, projects_write_request
+from zai_arsenkin.project_approvals import ApprovalStore
+from zai_arsenkin.projects import (
+    DESTRUCTIVE_ACTIONS,
+    WRITE_ACTIONS,
+    projects_request,
+    projects_write_request,
+)
 from zai_arsenkin.update_check import CACHE_FILE, cached_hint, check_update
 
 # MCP tool annotations; enforcement (scopes, approvals, budgets) stays server-side.
@@ -26,7 +32,7 @@ PAID_SUBMIT = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint":
 # Additive Projects API writes; run_positions spends limits. Free preview until confirm=true.
 PROJECT_WRITE = {
     "readOnlyHint": False,
-    "destructiveHint": False,
+    "destructiveHint": True,
     "idempotentHint": False,
     "openWorldHint": True,
 }
@@ -51,6 +57,7 @@ def register_tools(server: Any, runtime: Any) -> None:
     _provider_read = runtime.read
     _job_view, _owned_job = runtime.job_view, runtime.owned_job
     update_cache = settings.state_path.parent / CACHE_FILE
+    project_approvals = ApprovalStore(settings.state_path.with_name("arsenkin-projects-approvals.json"))
 
     @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)
     async def arsenkin_profile_catalog() -> dict[str, Any]:
@@ -112,6 +119,7 @@ def register_tools(server: Any, runtime: Any) -> None:
             "groups",
             "group",
             "tags",
+            "tag",
             "positions",
             "chart_visibility",
             "chart_top_statistics",
@@ -123,7 +131,9 @@ def register_tools(server: Any, runtime: Any) -> None:
         start_date: str | None = None,
         end_date: str | None = None,
         group_id: int | None = None,
+        tag_id: int | None = None,
         parent_id: int | None = None,
+        with_children: bool | None = None,
         keyword_ids: list[int] | None = None,
         project_region_ids: list[int] | None = None,
         group_ids: list[int] | None = None,
@@ -145,7 +155,8 @@ def register_tools(server: Any, runtime: Any) -> None:
         """Read saved Arsenkin SEO projects data (Projects API v1); never starts paid position checks.
 
         report=projects lists projects. With project_id: project, regions, competitors, keywords
-        (tag filters), groups, group (group_id), tags, positions (saved positions; filter by
+        (tag filters), groups (with_children), group (group_id), tags, tag (tag_id),
+        positions (saved positions; filter by
         project_region_id or project_region_ids, dates, groups, keyword_ids,
         position_from/to) and charts (chart_visibility, chart_top_statistics, chart_average_position,
         chart_median_position) that require project_region_id from report=project or regions.
@@ -155,7 +166,9 @@ def register_tools(server: Any, runtime: Any) -> None:
             "start_date": start_date,
             "end_date": end_date,
             "group_id": group_id,
+            "tag_id": tag_id,
             "parent_id": parent_id,
+            "with_children": with_children,
             "keyword_ids": keyword_ids,
             "project_region_ids": project_region_ids,
             "group_ids": group_ids,
@@ -184,17 +197,18 @@ def register_tools(server: Any, runtime: Any) -> None:
 
     @server.tool(auth=require_scopes("arsenkin:execute"), annotations=PROJECT_WRITE)
     async def arsenkin_projects_write(
-        action: Literal[
-            "create_project", "add_keywords", "create_group", "add_region", "add_competitor", "run_positions"
-        ],
+        action: Literal[WRITE_ACTIONS],  # type: ignore[valid-type]
         project_id: int | None = None,
         domain: str | None = None,
         name: str | None = None,
         keywords: list[str] | None = None,
         group_id: int | None = None,
+        target_id: int | None = None,
         parent_id: int | None = None,
         url: str | None = None,
         tags: list[str] | None = None,
+        color: str | None = None,
+        active: bool | None = None,
         region_id: int | None = None,
         device: Literal["desktop", "mobile"] | None = None,
         depth: int | None = None,
@@ -202,23 +216,31 @@ def register_tools(server: Any, runtime: Any) -> None:
         project_region_ids: list[int] | None = None,
         group_ids: list[int] | None = None,
         keyword_ids: list[int] | None = None,
+        tag_ids: list[int] | None = None,
+        system_tag: bool | None = None,
+        hard_delete: bool | None = None,
         sagging_positions: bool | None = None,
         confirm: bool = False,
+        approval_id: str | None = None,
     ) -> dict[str, Any]:
-        """Add to Arsenkin SEO projects: create project, add keywords/group/region/competitor, run positions.
+        """Change Arsenkin SEO projects (Projects API v1): create/update/delete projects, groups, tags;
+        add/delete regions, competitors, keywords (restore_keywords); tag/untag groups and keywords;
+        run_positions (paid, also needs ARSENKIN_PROJECTS_PAID=on).
 
-        Additive only (no edits/deletes). run_positions queues a paid position check (limits are
-        charged on queueing); poll arsenkin_projects(report=project) status_name, then positions.
-        Without confirm=true returns a free preview of the exact request.
+        target_id = region/competitor/tag id. Without confirm=true: free preview. confirm=true returns
+        approval_id for the operator (arsenkin-projects-approval); repeat with approval_id once accepted.
         """
         arguments = {
             "domain": domain,
             "name": name,
             "keywords": keywords,
             "group_id": group_id,
+            "target_id": target_id,
             "parent_id": parent_id,
             "url": url,
             "tags": tags,
+            "color": color,
+            "active": active,
             "region_id": region_id,
             "device": device,
             "depth": depth,
@@ -226,6 +248,9 @@ def register_tools(server: Any, runtime: Any) -> None:
             "project_region_ids": project_region_ids,
             "group_ids": group_ids,
             "keyword_ids": keyword_ids,
+            "tag_ids": tag_ids,
+            "system_tag": system_tag,
+            "hard_delete": hard_delete,
             "sagging_positions": sagging_positions,
         }
         try:
@@ -233,7 +258,7 @@ def register_tools(server: Any, runtime: Any) -> None:
         except ValueError as exc:
             raise safe_provider_error("arsenkin", exc) from None
         if action == "run_positions" and not _paid_positions_enabled():
-            # Paid and outside arsenkin_prepare's operator approval + monthly cost limit:
+            # Paid and outside arsenkin_prepare's monthly cost limit:
             # only an operator setting (not the agent's confirm=true) may enable it.
             return {
                 "ok": False,
@@ -245,14 +270,35 @@ def register_tools(server: Any, runtime: Any) -> None:
                 "error": f"run_positions is paid; the operator must set {PAID_POSITIONS_ENV}=on. "
                 "Use one-off positions via arsenkin_estimate -> arsenkin_prepare instead.",
             }
+        destructive = action in DESTRUCTIVE_ACTIONS
         if confirm is not True:
             return {
                 "needs_confirmation": True,
                 "method": method,
                 "path": path,
                 "body": body,
+                "destructive": destructive,
                 "hint": CONFIRM_HINT,
             }
+        request = {"project_id": project_id, "method": method, "path": path, "body": body}
+        if not approval_id:
+            ticket = project_approvals.prepare("arsenkin_projects_write", request, f"{method} {path}")
+            return {
+                "needs_operator_approval": True,
+                **ticket,
+                "method": method,
+                "path": path,
+                "body": body,
+                "destructive": destructive,
+                "operator_command": f"arsenkin-projects-approval --approval-id {ticket['approval_id']} "
+                f"--digest {ticket['digest']} --accept",
+                "hint": "Show the change; the operator (not the agent) runs operator_command, then "
+                "repeat the same call with approval_id.",
+            }
+        try:
+            project_approvals.consume(approval_id, "arsenkin_projects_write", request)
+        except PermissionError as exc:
+            return {"ok": False, "code": "approval_invalid", "retryable": False, "error": str(exc)}
         return await _provider_read(
             "arsenkin",
             f"projects_write_{action}",

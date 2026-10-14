@@ -67,8 +67,8 @@ DESCRIPTIONS = {
     "already spent limits may not return.",
     "arsenkin_projects": "Read saved Arsenkin Projects data: projects, regions, competitors, keywords, "
     "saved positions, charts. Use for tracked-project reports; never starts checks. Cost: free.",
-    "arsenkin_projects_write": "Add to an Arsenkin SEO project: create project, keywords, group, region, "
-    "competitor, or run a paid position check. Writes: preview until confirm=true; no edits/deletes.",
+    "arsenkin_projects_write": "Change an Arsenkin SEO project (projects, groups, tags, keywords, regions). "
+    "Writes: operator approval_id; run_positions is paid.",
     "arsenkin_check_update": "Check for a newer server release; never installs. Cost: free, 24h cache.",
 }
 
