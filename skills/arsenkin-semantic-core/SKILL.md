@@ -24,7 +24,7 @@ Every paid step: `arsenkin_estimate` + `arsenkin_limits` -> show -> explicit OK 
 5. Map clusters to pages: `relevant-url` (host) shows which URL ranks; else mark "new page".
 6. Positions, tracked: `arsenkin_projects_write` — `create_project` (or reuse `arsenkin_projects`),
    `add_region`, one `create_group` per cluster, `add_keywords(group_id, url)`, `run_positions`
-   (each with confirm=true after OK) -> poll `arsenkin_projects(report="project")` -> `report="positions"`.
+   (each: confirm=true after OK -> operator accepts approval_id -> repeat with approval_id; `run_positions` also needs operator `ARSENKIN_PROJECTS_PAID=on`) -> poll `arsenkin_projects(report="project")` -> `report="positions"`.
    Positions, one-off (no project): profile `positions` (queries, url, se).
 7. Output with [templates/semantic-core.md](templates/semantic-core.md).
 

@@ -29,7 +29,7 @@ LOCAL_PREPARE = {
 }
 # Queues an approved paid provider task; idempotency_key replays return the same job.
 PAID_SUBMIT = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": True}
-# Additive Projects API writes; run_positions spends limits. Free preview until confirm=true.
+# Projects API writes (operator approval); run_positions spends limits. Free preview until confirm=true.
 PROJECT_WRITE = {
     "readOnlyHint": False,
     "destructiveHint": True,

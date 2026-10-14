@@ -27,7 +27,7 @@ ROUTER = build_router(
     "show cost+arsenkin_limits -> prepare -> after OK submit(approval_id, idempotency_key) -> task_status "
     "-> result_table. Unknown outcome: request_hash_lookup, never resubmit.",
     ROUTES,
-    "Opt-in projects_write: free preview, confirm=true only after user OK.",
+    "Opt-in projects_write: preview; confirm=true after user OK -> operator approval_id.",
 )
 
 PAID = "Cost: spends Arsenkin limits (see estimate); requires approval_id from `arsenkin_prepare`."
@@ -68,7 +68,7 @@ DESCRIPTIONS = {
     "arsenkin_projects": "Read saved Arsenkin Projects data: projects, regions, competitors, keywords, "
     "saved positions, charts. Use for tracked-project reports; never starts checks. Cost: free.",
     "arsenkin_projects_write": "Change an Arsenkin SEO project (projects, groups, tags, keywords, regions). "
-    "Writes: operator approval_id; run_positions is paid.",
+    "Writes: operator approval_id; paid run_positions needs ARSENKIN_PROJECTS_PAID=on.",
     "arsenkin_check_update": "Check for a newer server release; never installs. Cost: free, 24h cache.",
 }
 
