@@ -106,6 +106,15 @@ SQLite и внешнее API не являются одной транзакци
 Retry-After и cooldown переживают перезапуск. Вызовы имеют общий deadline;
 после отмены клиентского запроса не остаётся фонового API-вызова.
 
+## Изменения проектов (opt-in)
+
+Набор `projects_write` (`arsenkin_projects_write`, scope `arsenkin:execute`) выключен по
+умолчанию и удаляется `ARSENKIN_READ_ONLY=1`. Каждое изменение требует одноразового
+согласования на точный запрос и того же principal: оператор принимает его через
+`arsenkin-projects-approval` (файл `arsenkin-projects-approvals.json` рядом с
+`ARSENKIN_STATE_PATH`, TTL 30 минут). Платный `run_positions` не проходит через месячный
+бюджет и очередь выше, поэтому дополнительно требует `ARSENKIN_PROJECTS_PAID=on`.
+
 ## Подключение и проверка
 
 Платформа устанавливает конкретный базовый wheel по версии и SHA-256.
