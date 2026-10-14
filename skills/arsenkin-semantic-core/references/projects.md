@@ -15,7 +15,7 @@ Writes (`arsenkin_projects_write`, opt-in toolset `projects_write`, `ARSENKIN_TO
 | `add_keywords` | project_id, keywords (≤10 000) | group_id, url, tags (≤50) |
 | `add_region` | project_id, region_id | engine_type 0 Yandex/1 Google, device, depth 10–100 |
 | `add_competitor` | project_id, url | max 30 per project |
-| `run_positions` | project_id | paid; limits charged on queueing; narrow by project_region_ids/group_ids/keyword_ids; sagging_positions=true |
+| `run_positions` | project_id | paid; disabled unless the operator sets `ARSENKIN_PROJECTS_PAID=on` (`code: paid_disabled`); limits charged on queueing; narrow by project_region_ids/group_ids/keyword_ids; sagging_positions=true |
 
 Every write returns a free preview (`needs_confirmation`, exact body) until `confirm=true`.
 After `run_positions` poll `report=project` until `status_name=finished`, then `report=positions`.

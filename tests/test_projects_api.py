@@ -125,6 +125,8 @@ def test_new_project_reads_and_additive_writes():
         {"keywords": ["a", "b"], "group_id": 2},
     )
     assert projects_write_request("run_positions", 7)[1] == "/projects/7/positions/run"
+    # apidoc groups-list documents tag_ids (comma-separated) next to parent_id/search.
+    assert projects_request("groups", 7, tag_ids=[3, 4])[1]["tag_ids"] == "3,4"
     with pytest.raises(ValueError):
         projects_write_request("create_project", domain="not a url")
     with pytest.raises(ValueError):
@@ -133,10 +135,19 @@ def test_new_project_reads_and_additive_writes():
 
 async def test_projects_write_previews_until_confirmed(config, monkeypatch):
     monkeypatch.setenv("ARSENKIN_TOOLSETS", "all")
+    monkeypatch.delenv("ARSENKIN_PROJECTS_PAID", raising=False)
     server = create_server(config, transport="stdio", http_factory=ProjectsHttp)
     async with Client(server) as client:
         tools = {tool.name: tool for tool in await client.list_tools()}
         assert tools["arsenkin_projects_write"].annotations.destructiveHint is False
+        # Paid run_positions bypasses the approval ledger: the agent's confirm=true is not enough.
+        blocked = (
+            await client.call_tool(
+                "arsenkin_projects_write", {"action": "run_positions", "project_id": 7, "confirm": True}
+            )
+        ).data
+        assert blocked["code"] == "paid_disabled" and ProjectsHttp.seen == []
+        monkeypatch.setenv("ARSENKIN_PROJECTS_PAID", "on")
         preview = (
             await client.call_tool("arsenkin_projects_write", {"action": "run_positions", "project_id": 7})
         ).data

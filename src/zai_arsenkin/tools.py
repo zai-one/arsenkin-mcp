@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any, Literal
 from uuid import UUID
 
@@ -33,6 +34,14 @@ CONFIRM_HINT = (
     "Preview only, nothing sent. Show this change (and for run_positions the arsenkin_limits cost) "
     "to the user and repeat with confirm=true only after an explicit OK."
 )
+PAID_POSITIONS_ENV = "ARSENKIN_PROJECTS_PAID"
+
+
+def _paid_positions_enabled() -> bool:
+    """run_positions spends limits outside the approval/budget ledger, so the operator opts in."""
+    return os.environ.get(PAID_POSITIONS_ENV, "").strip().lower() in {"1", "on", "true", "yes"}
+
+
 CANCEL = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": True}
 
 
@@ -223,6 +232,19 @@ def register_tools(server: Any, runtime: Any) -> None:
             method, path, body = projects_write_request(action, project_id, **arguments)
         except ValueError as exc:
             raise safe_provider_error("arsenkin", exc) from None
+        if action == "run_positions" and not _paid_positions_enabled():
+            # Paid and outside arsenkin_prepare's operator approval + monthly cost limit:
+            # only an operator setting (not the agent's confirm=true) may enable it.
+            return {
+                "ok": False,
+                "code": "paid_disabled",
+                "retryable": False,
+                "method": method,
+                "path": path,
+                "body": body,
+                "error": f"run_positions is paid; the operator must set {PAID_POSITIONS_ENV}=on. "
+                "Use one-off positions via arsenkin_estimate -> arsenkin_prepare instead.",
+            }
         if confirm is not True:
             return {
                 "needs_confirmation": True,

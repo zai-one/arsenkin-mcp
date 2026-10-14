@@ -33,7 +33,11 @@ REPORTS: dict[str, tuple[str, frozenset[str], frozenset[str]]] = {
     ),
     "group": ("/projects/{id}/groups/{group_id}", frozenset({"group_id"}), frozenset({"group_id"})),
     "tags": ("/projects/{id}/tags", frozenset(), frozenset()),
-    "groups": ("/projects/{id}/groups", frozenset({"parent_id", "search", "per_page", "page"}), frozenset()),
+    "groups": (
+        "/projects/{id}/groups",
+        frozenset({"parent_id", "search", "per_page", "page", "tag_ids"}),
+        frozenset(),
+    ),
     "positions": (
         "/projects/{id}/positions",
         frozenset(
