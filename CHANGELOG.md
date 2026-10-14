@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Projects writes, semantics -> clusters -> positions, router eval
+## 0.6.0 — Projects writes, semantics -> clusters -> positions, router eval
 
 - Upgrade note: `ARSENKIN_TOOLSETS=all` now also enables the new opt-in `projects_write` toolset (writes and the paid `run_positions`, still behind operator approval and `ARSENKIN_PROJECTS_PAID=on`). Unset or `default` keeps the 0.5.0 surface; list toolsets explicitly if you relied on `all` meaning the previous set.
 - Optional lazy tool loading (`ARSENKIN_TOOL_LOADING=eager|lazy`, default `eager` = unchanged): lazy lists a small core plus `arsenkin_enable_toolsets` (toolsets with one-line description and token cost); enabling registers the tools at runtime and sends `notifications/tools/list_changed`. Allowlists, read-only mode and approval gates still apply. Setup wizard asks eager vs lazy. Startup tokens (tools/list + instructions, ≈chars/4): eager ≈3678, lazy ≈1285. Scope: enablement is per MCP session (FastMCP session visibility), so one client's enabled toolsets never appear for another. The HTTP transport here is stateless (every request is its own session), so enabled toolsets do not persist there: for shared HTTP use `eager` or `ARSENKIN_TOOLSETS`. README lazy section lists verified `tools/list_changed` client support with sources.

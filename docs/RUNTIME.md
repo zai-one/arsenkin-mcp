@@ -17,7 +17,7 @@ uv build
 uv run arsenkin-mcp --transport stdio
 ```
 
-Wheel: `pip install './dist/zai_arsenkin_mcp-0.5.0-py3-none-any.whl[standalone]'`.
+Wheel: `pip install './dist/zai_arsenkin_mcp-0.6.0-py3-none-any.whl[standalone]'`.
 Extra `standalone` закрепляет FastMCP 3.4.4. Базовый wheel содержит код адаптера,
 инструментов и выполнения для композиции в платформе; версию FastMCP хоста
 он не меняет. Remote пока не настроен. Для точного воспроизведения wheel
