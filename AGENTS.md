@@ -1,21 +1,20 @@
-# Arsenkin MCP maintenance
+# arsenkin-mcp development
 
-Independent source of Arsenkin adapters, MCP tools and paid-job business logic.
-Follow the ZAI task protocol when in that workspace; runtime must work outside it.
-Use Python and synthetic offline fixtures. Tests never call real paid APIs.
-Preserve ownership, scopes, approvals, budgets, durable queue and uncertain state.
+<!-- mcp-standard:begin version=1.0.7 sha256=1608a4437ee3c5a0fed8a916c2c4fab3fe2e208a22ddf17953cbbe5f4e904ea7 -->
+- Preserve tool names, schemas, defaults and existing local work; document intentional compatibility changes.
+- Enforce principal/account/target scopes and budgets on every path, including new tools, aliases, batches and metadata reads.
+- Keep approval consumption, cost reservation and idempotency atomic; reconcile unknown outcomes before retrying writes or paid calls.
+- Preserve server approval policy and the user's granted authority; never self-approve, widen access or expose secrets in errors/logs.
+- Preserve units, dates, filters, pagination and continuation in compact output; label partial results explicitly.
+- Use offline synthetic tests; report the checked revision, results and unrun checks. Visibility is not authorization.
+- Read [contracts](docs/engineering/contracts.md) for API/tools, transport, output or packaging changes.
+- Read [safety](docs/engineering/safety.md) for authorization, secrets, money, writes, retries or concurrent state.
+- Read [releases](docs/engineering/releases.md) for releases, upstream integration or runtime verification.
+- Read [project guidance](docs/engineering/local.md) for the relevant subsystem; use its linked topics only as needed.
+- If `AGENTS.local.md` exists, read its short private workspace notes; never publish personal configuration.
+<!-- mcp-standard:end -->
 
-Use Python for scripts. Preserve existing MCP names/schemas and server-owned
-authorization, account boundaries, budgets, approvals and unknown-outcome state.
-Do not use live provider accounts or credentials in tests. Keep setup local and explicit.
-Run scripts/verify.py and scripts/verify_install.py before releases.
-Use Issues for requested changes. Preserve LICENSE, NOTICE and third-party licenses.
-Never publish operational handoffs, private extraction refs, credentials or runtime state.
-Production deployment is a separate action.
-When operating in a workspace with a task/verifier protocol, follow that protocol.
-
-## Using this server from an agent
-
-Agent playbooks live in `skills/` (self-contained `SKILL.md` + `references/`/`templates/`), mirrored as MCP
-prompts and `arsenkin://playbook` / `arsenkin://guide/{topic}`. Keep `resources/guide/*.md` and copies inside
-skills identical (`scripts/token_budget.py` checks this and all size budgets).
+## Local profile
+- Python 3.12+; paid Arsenkin jobs, durable queue and unknown-outcome state.
+- Preserve ownership, paid-job budgets, approvals and durable reconciliation.
+- Checks: `uv run python scripts/verify.py`; `python scripts/check_engineering.py --check`. Run install checks before release.
