@@ -17,7 +17,7 @@ uv build
 uv run arsenkin-mcp --transport stdio
 ```
 
-Wheel: `pip install './dist/zai_arsenkin_mcp-0.5.0-py3-none-any.whl[standalone]'`.
+Wheel: `pip install './dist/zai_arsenkin_mcp-0.6.0-py3-none-any.whl[standalone]'`.
 Extra `standalone` закрепляет FastMCP 3.4.4. Базовый wheel содержит код адаптера,
 инструментов и выполнения для композиции в платформе; версию FastMCP хоста
 он не меняет. Remote пока не настроен. Для точного воспроизведения wheel
@@ -105,6 +105,28 @@ SQLite и внешнее API не являются одной транзакци
 Платный POST автоматически не повторяется; read-retries учитываются отдельно.
 Retry-After и cooldown переживают перезапуск. Вызовы имеют общий deadline;
 после отмены клиентского запроса не остаётся фонового API-вызова.
+
+## Изменения проектов (opt-in)
+
+Набор `projects_write` (`arsenkin_projects_write`, scope `arsenkin:execute`) выключен по
+умолчанию и удаляется `ARSENKIN_READ_ONLY=1`. Каждое изменение требует одноразового
+согласования на точный запрос и того же principal: оператор принимает его через
+`arsenkin-projects-approval` (файл `<имя БД>.projects-approvals.json` рядом с
+`ARSENKIN_STATE_PATH`, свой для каждой БД состояния, TTL 30 минут). Согласование привязано к
+аккаунту (account id, отпечаток токена, URL провайдера, БД состояния). Ожидающих согласований не
+больше 10 на principal и 100 всего, запрос до 2 МиБ, файл до 8 МиБ (`approval_quota_exceeded`).
+
+Использованное согласование становится записью отправки. Повтор с тем же `approval_id` не
+вызывает провайдера: завершённая запись возвращает сохранённый результат. Если запрос ушёл, а
+ответ потерян (таймаут, обрыв, невалидный ответ), инструмент возвращает `outcome_unknown`
+(без retry), и новое согласование на тот же запрос отклоняется, пока оператор не проверит
+провайдера и не выполнит `arsenkin-projects-approval --approval-id ID --resolve applied|not_applied`.
+
+Платный `run_positions` **не учитывается** в месячных бюджетах
+(`ARSENKIN_PRINCIPAL_MONTHLY_COST_LIMIT`, `ARSENKIN_ACCOUNT_MONTHLY_COST_LIMIT`) и в
+`ARSENKIN_MAX_COST_PER_APPROVAL`, не резервирует стоимость и не проходит через очередь выше.
+Его ограничивают только `ARSENKIN_PROJECTS_PAID=on` (по умолчанию выключено) и одноразовое
+согласование оператора; так решил владелец.
 
 ## Подключение и проверка
 

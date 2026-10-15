@@ -25,7 +25,8 @@ async def test_token_budget_and_agent_surface(config):
     async with Client(create_server(config, transport="stdio")) as client:
         assert len(client.initialize_result.instructions or "") <= INSTRUCTIONS_LIMIT
         tools = await client.list_tools()
-        assert {tool.name for tool in tools} == {n for group in PROFILE.toolsets.values() for n in group}
+        default = {n for ts, group in PROFILE.toolsets.items() if ts not in PROFILE.optin for n in group}
+        assert {tool.name for tool in tools} == default
         for tool in tools:
             assert tool.title and len(tool.description or "") <= DESCRIPTION_LIMIT, tool.name
         assert len(json.dumps([tool.model_dump(exclude_none=True) for tool in tools])) <= TOOLS_LIST_BUDGET
@@ -36,6 +37,7 @@ async def test_token_budget_and_agent_surface(config):
             "cluster_keywords",
             "index_check",
             "text_relevance",
+            "semantic_core",
         }
 
 

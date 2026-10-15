@@ -1,12 +1,28 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any, Literal
 from uuid import UUID
 
 from zai_arsenkin.adapter import build_batch_plan, estimate_cost
+from zai_arsenkin.errors import SafeToolError, safe_provider_error
 from zai_arsenkin.models import validate_request_hashes
-from zai_arsenkin.projects import projects_request
+from zai_arsenkin.project_approvals import (
+    ApprovalQuotaExceeded,
+    ApprovalStore,
+    OutcomeUnresolved,
+    account_binding,
+    approvals_path,
+)
+from zai_arsenkin.projects import (
+    DESTRUCTIVE_ACTIONS,
+    PROJECTS_BASE_URL,
+    WRITE_ACTIONS,
+    projects_request,
+    projects_write_request,
+)
+from zai_arsenkin.transport import ProviderAdmissionDenied, ProviderHttpError, ProviderRateLimited
 from zai_arsenkin.update_check import CACHE_FILE, cached_hint, check_update
 
 # MCP tool annotations; enforcement (scopes, approvals, budgets) stays server-side.
@@ -21,6 +37,52 @@ LOCAL_PREPARE = {
 }
 # Queues an approved paid provider task; idempotency_key replays return the same job.
 PAID_SUBMIT = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": True}
+# Projects API writes (operator approval); run_positions spends limits. Free preview until confirm=true.
+PROJECT_WRITE = {
+    "readOnlyHint": False,
+    "destructiveHint": True,
+    "idempotentHint": False,
+    "openWorldHint": True,
+}
+CONFIRM_HINT = (
+    "Preview only, nothing sent. Show this change (and for run_positions the arsenkin_limits cost) "
+    "to the user and repeat with confirm=true only after an explicit OK."
+)
+PAID_POSITIONS_ENV = "ARSENKIN_PROJECTS_PAID"
+
+
+def _paid_positions_enabled() -> bool:
+    """run_positions spends limits outside the paid-job ledger and its budgets, so the operator opts in."""
+    return os.environ.get(PAID_POSITIONS_ENV, "").strip().lower() in {"1", "on", "true", "yes"}
+
+
+# HTTP statuses after which the provider surely did not apply a write (same set as paid submits).
+_NOT_APPLIED_STATUSES = frozenset({400, 401, 403, 404, 405, 422})
+
+
+def _surely_not_applied(exc: Exception, attempts: int) -> bool:
+    """True only if nothing reached the provider or its single answer was a definite refusal."""
+    if attempts == 0:
+        return True
+    if attempts != 1:
+        return False
+    if isinstance(exc, ProviderRateLimited):
+        return not isinstance(exc, ProviderAdmissionDenied)
+    return isinstance(exc, ProviderHttpError) and exc.status_code in _NOT_APPLIED_STATUSES
+
+
+def _outcome_unknown(approval_id: str) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "code": "outcome_unknown",
+        "retryable": False,
+        "approval_id": approval_id,
+        "error": "the write was sent but its result is unknown; it may have been applied",
+        "hint": "Do not retry. Check with arsenkin_projects reads, then the operator runs "
+        "arsenkin-projects-approval --approval-id ID --resolve applied|not_applied.",
+    }
+
+
 CANCEL = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True, "openWorldHint": True}
 
 
@@ -30,6 +92,11 @@ def register_tools(server: Any, runtime: Any) -> None:
     _provider_read = runtime.read
     _job_view, _owned_job = runtime.job_view, runtime.owned_job
     update_cache = settings.state_path.parent / CACHE_FILE
+    project_approvals = ApprovalStore(
+        approvals_path(settings.state_path),
+        account_binding(settings.account_id, settings.state_path, settings.token, PROJECTS_BASE_URL),
+        settings.account_id,
+    )
 
     @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)
     async def arsenkin_profile_catalog() -> dict[str, Any]:
@@ -89,6 +156,9 @@ def register_tools(server: Any, runtime: Any) -> None:
             "competitors",
             "keywords",
             "groups",
+            "group",
+            "tags",
+            "tag",
             "positions",
             "chart_visibility",
             "chart_top_statistics",
@@ -100,8 +170,17 @@ def register_tools(server: Any, runtime: Any) -> None:
         start_date: str | None = None,
         end_date: str | None = None,
         group_id: int | None = None,
+        tag_id: int | None = None,
         parent_id: int | None = None,
+        with_children: bool | None = None,
         keyword_ids: list[int] | None = None,
+        project_region_ids: list[int] | None = None,
+        group_ids: list[int] | None = None,
+        tag_ids: list[int] | None = None,
+        tag_mode: Literal["include", "exclude"] | None = None,
+        without_tags: bool | None = None,
+        is_deleted: bool | None = None,
+        with_snippets: bool | None = None,
         position_from: int | None = None,
         position_to: int | None = None,
         sort: Literal["scan_date", "-scan_date"] | None = None,
@@ -114,8 +193,10 @@ def register_tools(server: Any, runtime: Any) -> None:
     ) -> dict[str, Any]:
         """Read saved Arsenkin SEO projects data (Projects API v1); never starts paid position checks.
 
-        report=projects lists projects. With project_id: project, regions, competitors, keywords,
-        groups, positions (saved positions; filter by project_region_id, dates, groups, keyword_ids,
+        report=projects lists projects. With project_id: project, regions, competitors, keywords
+        (tag filters), groups (with_children), group (group_id), tags, tag (tag_id),
+        positions (saved positions; filter by
+        project_region_id or project_region_ids, dates, groups, keyword_ids,
         position_from/to) and charts (chart_visibility, chart_top_statistics, chart_average_position,
         chart_median_position) that require project_region_id from report=project or regions.
         """
@@ -124,8 +205,17 @@ def register_tools(server: Any, runtime: Any) -> None:
             "start_date": start_date,
             "end_date": end_date,
             "group_id": group_id,
+            "tag_id": tag_id,
             "parent_id": parent_id,
+            "with_children": with_children,
             "keyword_ids": keyword_ids,
+            "project_region_ids": project_region_ids,
+            "group_ids": group_ids,
+            "tag_ids": tag_ids,
+            "tag_mode": tag_mode,
+            "without_tags": without_tags,
+            "is_deleted": is_deleted,
+            "with_snippets": with_snippets,
             "position_from": position_from,
             "position_to": position_to,
             "sort": sort,
@@ -143,6 +233,171 @@ def register_tools(server: Any, runtime: Any) -> None:
             lambda: registry.arsenkin_projects().get(report, project_id, **optional),
             validate=lambda: projects_request(report, project_id, **optional),
         )
+
+    @server.tool(auth=require_scopes("arsenkin:execute"), annotations=PROJECT_WRITE)
+    async def arsenkin_projects_write(
+        action: Literal[WRITE_ACTIONS],  # type: ignore[valid-type]
+        project_id: int | None = None,
+        domain: str | None = None,
+        name: str | None = None,
+        keywords: list[str] | None = None,
+        group_id: int | None = None,
+        target_id: int | None = None,
+        parent_id: int | None = None,
+        url: str | None = None,
+        tags: list[str] | None = None,
+        color: str | None = None,
+        active: bool | None = None,
+        region_id: int | None = None,
+        device: Literal["desktop", "mobile"] | None = None,
+        depth: int | None = None,
+        engine_type: int | None = None,
+        project_region_ids: list[int] | None = None,
+        group_ids: list[int] | None = None,
+        keyword_ids: list[int] | None = None,
+        tag_ids: list[int] | None = None,
+        system_tag: bool | None = None,
+        hard_delete: bool | None = None,
+        sagging_positions: bool | None = None,
+        confirm: bool = False,
+        approval_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Change Arsenkin SEO projects (Projects API v1): create/update/delete projects, groups, tags;
+        add/delete regions, competitors, keywords (restore_keywords); tag/untag groups and keywords;
+        run_positions (paid, needs ARSENKIN_PROJECTS_PAID=on; NOT counted against ARSENKIN monthly
+        budgets or ARSENKIN_MAX_COST_PER_APPROVAL).
+
+        target_id = region/competitor/tag id. Without confirm=true: free preview. confirm=true returns
+        approval_id for the operator (arsenkin-projects-approval); repeat with approval_id once accepted.
+        code=outcome_unknown: do not retry.
+        """
+        arguments = {
+            "domain": domain,
+            "name": name,
+            "keywords": keywords,
+            "group_id": group_id,
+            "target_id": target_id,
+            "parent_id": parent_id,
+            "url": url,
+            "tags": tags,
+            "color": color,
+            "active": active,
+            "region_id": region_id,
+            "device": device,
+            "depth": depth,
+            "engine_type": engine_type,
+            "project_region_ids": project_region_ids,
+            "group_ids": group_ids,
+            "keyword_ids": keyword_ids,
+            "tag_ids": tag_ids,
+            "system_tag": system_tag,
+            "hard_delete": hard_delete,
+            "sagging_positions": sagging_positions,
+        }
+        try:
+            method, path, body = projects_write_request(action, project_id, **arguments)
+        except ValueError as exc:
+            raise safe_provider_error("arsenkin", exc) from None
+        if action == "run_positions" and not _paid_positions_enabled():
+            # Paid and outside arsenkin_prepare's monthly cost limit:
+            # only an operator setting (not the agent's confirm=true) may enable it.
+            return {
+                "ok": False,
+                "code": "paid_disabled",
+                "retryable": False,
+                "method": method,
+                "path": path,
+                "body": body,
+                "error": f"run_positions is paid; the operator must set {PAID_POSITIONS_ENV}=on. "
+                "Use one-off positions via arsenkin_estimate -> arsenkin_prepare instead.",
+            }
+        destructive = action in DESTRUCTIVE_ACTIONS
+        if confirm is not True:
+            return {
+                "needs_confirmation": True,
+                "method": method,
+                "path": path,
+                "body": body,
+                "destructive": destructive,
+                "hint": CONFIRM_HINT,
+            }
+        request = {"project_id": project_id, "method": method, "path": path, "body": body}
+        # Bound to the preparing principal, like arsenkin_prepare approvals.
+        principal = runtime.state.get().actor
+        if not approval_id:
+            try:
+                ticket = await asyncio.to_thread(
+                    project_approvals.prepare,
+                    "arsenkin_projects_write",
+                    request,
+                    f"{method} {path}",
+                    principal,
+                )
+            except OutcomeUnresolved as exc:
+                return _outcome_unknown(exc.approval_id)
+            except ApprovalQuotaExceeded as exc:
+                return {"ok": False, "code": "approval_quota_exceeded", "retryable": False, "error": str(exc)}
+            return {
+                "needs_operator_approval": True,
+                **ticket,
+                "method": method,
+                "path": path,
+                "body": body,
+                "destructive": destructive,
+                "operator_command": project_approvals.operator_command("arsenkin-projects-approval", ticket),
+                "hint": "Show the change; the operator (not the agent) runs operator_command, then "
+                "repeat the same call with approval_id.",
+            }
+        try:
+            used = await asyncio.to_thread(
+                project_approvals.consume, approval_id, "arsenkin_projects_write", request, principal
+            )
+        except PermissionError as exc:
+            return {"ok": False, "code": "approval_invalid", "retryable": False, "error": str(exc)}
+        if used is not None:  # already dispatched: replay, never a second provider call
+            if used["state"] == "completed":
+                return {"replayed": True, "approval_id": approval_id, "result": used["result"]}
+            if used["state"] == "rejected":
+                return {
+                    "ok": False,
+                    "code": "approval_invalid",
+                    "retryable": False,
+                    "error": "approval already used; the provider did not apply it",
+                }
+            return _outcome_unknown(approval_id)
+        # Until the request may have left, the provider surely did nothing.
+        outcome: dict[str, Any] = {"state": "rejected", "result": None}
+
+        async def dispatch() -> dict[str, Any]:
+            outcome["state"] = "unknown"  # also if cancelled or timed out from here on
+            http = runtime.state.get().http
+            before = getattr(http, "admitted_count", 0)
+            try:
+                response = await registry.arsenkin_projects().write(action, project_id, **arguments)
+            except Exception as exc:
+                if _surely_not_applied(exc, getattr(http, "admitted_count", 0) - before):
+                    outcome["state"] = "rejected"
+                raise
+            outcome["state"] = "completed"
+            return response
+
+        try:
+            outcome["result"] = await _provider_read(
+                "arsenkin",
+                f"projects_write_{action}",
+                {"action": action, "project_id": project_id, **arguments},
+                dispatch,
+            )
+        except SafeToolError:
+            if outcome["state"] != "unknown":
+                raise
+            return _outcome_unknown(approval_id)
+        finally:
+            # Durable outcome; if this is skipped the record stays "dispatching" (= unknown, fail closed).
+            await asyncio.to_thread(
+                project_approvals.finish, approval_id, outcome["state"], outcome["result"]
+            )
+        return outcome["result"]
 
     @server.tool(auth=require_scopes("arsenkin:read"), annotations=LOCAL_READ)
     async def arsenkin_estimate(profile: str, payload: dict[str, Any]) -> dict[str, Any]:

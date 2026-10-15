@@ -29,14 +29,29 @@ Try asking your assistant:
 
 ## Why this MCP
 
-- Every paid job is estimated first and submitted only after approval; `arsenkin_limits` shows remaining limits.
+- Optional lazy tool loading: set `ARSENKIN_TOOL_LOADING=lazy` (or choose it in the setup wizard) to start with a small core and enable toolsets on demand; see [Lazy tool loading](#lazy-tool-loading).
+- Every paid job is estimated first, budget-checked and submitted only after approval (exception: the opt-in projects `run_positions`, see below); `arsenkin_limits` shows remaining limits.
 - Jobs run through a worker with tracked state; results are saved and exported as tables (JSON/CSV) with source pointers.
-- 18 tools in toolsets (meta, jobs, results, projects), 3 prompts, guide resources and skills.
+- 18 default tools (meta, jobs, results, projects) plus opt-in `projects_write`, 4 prompts, guide resources and skills.
 - We found no other Arsenkin Tools MCP server on GitHub (search on 2026-10-13).
+
+## Lazy tool loading
+
+Optional lazy tool loading: `ARSENKIN_TOOL_LOADING=lazy` starts with a small core plus `arsenkin_enable_toolsets` and adds toolsets on demand (`tools/list_changed`). Startup cost (tools/list + instructions, ≈chars/4): eager ≈3678 tokens, lazy ≈1285 tokens (−65%). Default `eager` is unchanged; if your client ignores `tools/list_changed`, keep `eager` or reconnect after enabling. Scope: enablement is per MCP session (FastMCP session visibility), so one client's enabled toolsets never appear for another. The HTTP transport here is stateless (every request is its own session), so enabled toolsets do not persist there: for shared HTTP use `eager` or `ARSENKIN_TOOLSETS`.
+
+Clients and `notifications/tools/list_changed` (verified against official docs, changelogs or maintainer statements, 2026-10):
+
+| Client | `tools/list_changed` | Source |
+|---|---|---|
+| Claude Code | Supported (interactive: tools, prompts, resources; `-p`/Agent SDK: tools) | [docs: Dynamic tool updates](https://code.claude.com/docs/en/mcp) |
+| VS Code (GitHub Copilot) | Supported (dynamic tool discovery); new tools may reach the agent only on the next turn | [docs](https://code.visualstudio.com/api/extension-guides/ai/mcp), [#303012](https://github.com/microsoft/vscode/issues/303012) |
+| Gemini CLI | Supported (refreshes the tool registry) | [PR #14375](https://github.com/google-gemini/gemini-cli/pull/14375), [PR #21050](https://github.com/google-gemini/gemini-cli/pull/21050) |
+| Cursor | Unreliable: staff confirm a regression in 3.12.x; restart Cursor after enabling | [forum](https://forum.cursor.com/t/mcp-server-regression-does-not-reload-tools-disconnect-does-nothing-ignores-mcp-json-changes-etc/166216) |
+| Claude Desktop, Windsurf, Codex CLI, Cline, Zed, Continue | Unverified: no official statement found; use `eager` or reconnect after enabling | — |
 
 ## Maintained and up to date
 
-- Actively maintained by ZAI.ONE: current version 0.5.0; release notes in [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zai-one/arsenkin-mcp/releases).
+- Actively maintained by ZAI.ONE: current version 0.6.0; release notes in [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zai-one/arsenkin-mcp/releases).
 - Built-in update check: ask the assistant to run `arsenkin_check_update` (public GitHub API, no credentials, cached; nothing is installed automatically; `ARSENKIN_DISABLE_UPDATE_CHECK=1` turns it off).
 - Follows current MCP practice: tool annotations (read-only / destructive hints), toolsets and read-only mode, server `instructions`, prompts and resources, structured errors with recovery hints, secrets kept out of tool output, a token budget for tool descriptions enforced in tests.
 - CI runs the test suite on Linux and Windows for every pull request.
@@ -104,13 +119,13 @@ reproducible installs; placeholders below are examples, keep secrets in files ou
 **Claude Code**
 
 ```bash
-claude mcp add arsenkin --env ARSENKIN_TOKEN_FILE=/path/to/arsenkin.token --env ARSENKIN_STATE_PATH=/path/to/arsenkin.sqlite -- uvx --from git+https://github.com/zai-one/arsenkin-mcp@v0.5.0 arsenkin-mcp
+claude mcp add arsenkin --env ARSENKIN_TOKEN_FILE=/path/to/arsenkin.token --env ARSENKIN_STATE_PATH=/path/to/arsenkin.sqlite -- uvx --from git+https://github.com/zai-one/arsenkin-mcp@v0.6.0 arsenkin-mcp
 ```
 
 Skills for Claude Code: copy `skills/*` into `~/.claude/skills/` (or install this repo as a plugin — it
 ships `.claude-plugin/plugin.json` with the skills and the MCP server).
 
-**Cursor** — `.cursor/mcp.json` ([one-click install](cursor://anysphere.cursor-deeplink/mcp/install?name=arsenkin&config=eyJjb21tYW5kIjogInV2eCIsICJhcmdzIjogWyItLWZyb20iLCAiZ2l0K2h0dHBzOi8vZ2l0aHViLmNvbS96YWktb25lL2Fyc2Vua2luLW1jcEB2MC41LjAiLCAiYXJzZW5raW4tbWNwIl0sICJlbnYiOiB7IkFSU0VOS0lOX1RPS0VOX0ZJTEUiOiAiL3BhdGgvdG8vYXJzZW5raW4udG9rZW4iLCAiQVJTRU5LSU5fU1RBVEVfUEFUSCI6ICIvcGF0aC90by9hcnNlbmtpbi5zcWxpdGUifX0=)):
+**Cursor** — `.cursor/mcp.json` ([one-click install](cursor://anysphere.cursor-deeplink/mcp/install?name=arsenkin&config=eyJjb21tYW5kIjogInV2eCIsICJhcmdzIjogWyItLWZyb20iLCAiZ2l0K2h0dHBzOi8vZ2l0aHViLmNvbS96YWktb25lL2Fyc2Vua2luLW1jcEB2MC42LjAiLCAiYXJzZW5raW4tbWNwIl0sICJlbnYiOiB7IkFSU0VOS0lOX1RPS0VOX0ZJTEUiOiAiL3BhdGgvdG8vYXJzZW5raW4udG9rZW4iLCAiQVJTRU5LSU5fU1RBVEVfUEFUSCI6ICIvcGF0aC90by9hcnNlbmtpbi5zcWxpdGUifX0=)):
 
 ```json
 {
@@ -119,7 +134,7 @@ ships `.claude-plugin/plugin.json` with the skills and the MCP server).
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/zai-one/arsenkin-mcp@v0.5.0",
+        "git+https://github.com/zai-one/arsenkin-mcp@v0.6.0",
         "arsenkin-mcp"
       ],
       "env": {
@@ -137,7 +152,7 @@ repo's `.agents/skills` link):
 ```toml
 [mcp_servers.arsenkin]
 command = "uvx"
-args = ["--from", "git+https://github.com/zai-one/arsenkin-mcp@v0.5.0", "arsenkin-mcp"]
+args = ["--from", "git+https://github.com/zai-one/arsenkin-mcp@v0.6.0", "arsenkin-mcp"]
 env = { ARSENKIN_TOKEN_FILE = "/path/to/arsenkin.token", ARSENKIN_STATE_PATH = "/path/to/arsenkin.sqlite" }
 ```
 
@@ -155,10 +170,20 @@ and open the other files on demand. Clients without skills get the same flows as
 | `arsenkin-serp-clustering` | Cluster keywords by SERP overlap: estimate, approval, submit, poll, clusters table. |
 | `arsenkin-index-check` | Yandex/Google indexation of URLs with a non-indexed report. |
 | `arsenkin-text-relevance` | LSI/highlights, Title/H1 of the TOP vs your page, optional copywriting brief. |
+| `arsenkin-semantic-core` | Semantics -> clusters -> positions: Wordstat phrases/frequency, clustering, project groups and a position check. |
 
 ## Toolsets and read-only mode
 
-`ARSENKIN_TOOLSETS=all` (default) or a comma list (see `arsenkin://toolsets`); `ARSENKIN_TOOLS=a,b` adds single tools,
+Default: `meta`, `jobs`, `results`, `projects`. Opt-in `projects_write` (`arsenkin_projects_write`: create/update/delete
+projects, groups and tags, add/delete regions, competitors and keywords, `restore_keywords`, tag/untag groups
+and keywords, run a paid position check — the latter also needs the operator setting `ARSENKIN_PROJECTS_PAID=on`;
+`run_positions` is **not** counted against the ARSENKIN monthly budgets or `ARSENKIN_MAX_COST_PER_APPROVAL` and has no
+cost estimate: its only gates are that setting and the operator approval). Free preview until `confirm=true`; then every write returns an
+`approval_id` and `operator_command`; the operator reviews the exact request with `arsenkin-projects-approval --path FILE --list`
+and accepts it outside MCP with the returned `arsenkin-projects-approval --path FILE --approval-id ID --digest D --accept`
+(single use, request-bound, bound to the preparing principal and account, 30 min; at most 10 waiting per principal) before the agent repeats the call with `approval_id`.
+If a write was sent but its result is unknown (`code: outcome_unknown`), do not retry: check with `arsenkin_projects`,
+then the operator runs `arsenkin-projects-approval --path FILE --approval-id ID --resolve applied|not_applied`. `ARSENKIN_TOOLSETS=default`, `all` or a comma list (see `arsenkin://toolsets`); `ARSENKIN_TOOLS=a,b` adds single tools,
 `ARSENKIN_DISABLED_TOOLS=a,b` removes them, `ARSENKIN_READ_ONLY=1` removes every write/paid tool.
 
 ## Example requests

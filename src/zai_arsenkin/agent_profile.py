@@ -2,20 +2,33 @@
 
 from __future__ import annotations
 
-from zai_arsenkin.agent_layer import Profile, Prompt
+from zai_arsenkin.agent_layer import Profile, Prompt, Route, build_router
 
-ROUTER = """Arsenkin MCP: paid SEO jobs (SERP top, clustering, Wordstat, indexation, LSI, meta tags, \
-AI answers, whois, IKS...) plus free saved Projects data.
-Toolsets: meta, jobs, results, projects (see arsenkin://toolsets).
-Which profile when: arsenkin://guide/tools.
-Job pattern: arsenkin_profile_catalog -> arsenkin_estimate (free) -> show cost and arsenkin_limits to the \
-user -> arsenkin_prepare -> only after explicit OK arsenkin_submit(approval_id, idempotency_key) -> poll \
-arsenkin_task_status -> arsenkin_get_result / arsenkin_result_table / arsenkin_export_result.
-Many requests: arsenkin_batch_estimate/prepare/submit. Never resubmit an unknown outcome; look up \
-arsenkin_request_hash_lookup first. Costs are policy units, not ruble invoices.
-Playbooks: skills arsenkin-serp-clustering, arsenkin-index-check, arsenkin-text-relevance; or \
-arsenkin://playbook, arsenkin://guide/{tools,clustering-params,errors}.
-Errors: retry only when retryable; follow the hint."""
+ROUTES = (
+    Route("cluster", "кластеризация, кластеры, сгруппировать, cluster", "arsenkin_estimate",
+          "arsenkin-serp-clustering", "clustering-params"),
+    Route("semantics", "семантика, ядро, вордстат, частотность, semantic core",
+          "arsenkin_profile_catalog", "arsenkin-semantic-core", "tools"),
+    Route("index", "индексация, проиндексированы, indexed, index", "arsenkin_estimate",
+          "arsenkin-index-check", "tools"),
+    Route("text", "текст, LSI, ТЗ, title, мета-теги", "arsenkin_estimate",
+          "arsenkin-text-relevance", "tools"),
+    Route("serp", "выдача, ТОП-10, SERP, подсказки, whois, ИКС, AI", "arsenkin_profile_catalog",
+          "", "tools"),
+    Route("projects", "проекты, проект, сохранённые позиции, видимость, project", "arsenkin_projects", "",
+          "projects"),
+    Route("job", "задача, статус, результат, отмена, лимиты, ошибка, job", "arsenkin_task_status", "",
+          "errors"),
+)  # fmt: skip
+
+ROUTER = build_router(
+    "arsenkin",
+    "Arsenkin MCP: paid SEO jobs + free saved Projects; arsenkin://toolsets. Jobs: estimate (free) -> "
+    "show cost+arsenkin_limits -> prepare -> after OK submit(approval_id, idempotency_key) -> task_status "
+    "-> result_table. Unknown outcome: request_hash_lookup, never resubmit.",
+    ROUTES,
+    "Opt-in projects_write: preview; confirm=true after user OK -> operator approval_id.",
+)
 
 PAID = "Cost: spends Arsenkin limits (see estimate); requires approval_id from `arsenkin_prepare`."
 
@@ -54,6 +67,8 @@ DESCRIPTIONS = {
     "already spent limits may not return.",
     "arsenkin_projects": "Read saved Arsenkin Projects data: projects, regions, competitors, keywords, "
     "saved positions, charts. Use for tracked-project reports; never starts checks. Cost: free.",
+    "arsenkin_projects_write": "Change an Arsenkin SEO project (projects, groups, tags, keywords, regions). "
+    "Writes: operator approval_id; paid run_positions needs ARSENKIN_PROJECTS_PAID=on.",
     "arsenkin_check_update": "Check for a newer server release; never installs. Cost: free, 24h cache.",
 }
 
@@ -78,9 +93,19 @@ TOOLSETS = {
     ),
     "results": ("arsenkin_get_result", "arsenkin_result_table", "arsenkin_export_result"),
     "projects": ("arsenkin_projects",),
+    "projects_write": ("arsenkin_projects_write",),
 }
+OPTIN = ("projects_write",)
 
 PROMPTS = (
+    Prompt(
+        "semantic_core",
+        "Semantics -> clusters -> positions with Arsenkin (paid steps approved one by one).",
+        ("seeds", "domain", "region"),
+        "Build a semantic core for {domain} from seeds {seeds} (region {region}) following skill "
+        "arsenkin-semantic-core: Wordstat phrases, frequency, clustering, then positions. Estimate and "
+        "ask before every paid submit.",
+    ),
     Prompt(
         "cluster_keywords",
         "Cluster a keyword list by SERP similarity with cost approval.",
@@ -111,4 +136,7 @@ PROFILE = Profile(
     descriptions=DESCRIPTIONS,
     toolsets=TOOLSETS,
     prompts=PROMPTS,
+    routes=ROUTES,
+    optin=OPTIN,
+    lazy_core=("arsenkin_estimate",),
 )

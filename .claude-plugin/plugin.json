@@ -1,6 +1,6 @@
 {
   "name": "arsenkin",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Arsenkin SEO tools (clustering, SERP, Wordstat, indexation...) with approval-gated jobs and agent skills",
   "author": {
     "name": "ZAI.ONE",
@@ -15,7 +15,7 @@
       "command": "uvx",
       "args": [
         "--from",
-        "git+https://github.com/zai-one/arsenkin-mcp@v0.5.0",
+        "git+https://github.com/zai-one/arsenkin-mcp@v0.6.0",
         "arsenkin-mcp"
       ],
       "env": {
